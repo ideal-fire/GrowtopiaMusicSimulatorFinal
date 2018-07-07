@@ -22,7 +22,7 @@
 #include <Lua/lualib.h>
 #include <Lua/lauxlib.h>
 
-#define ISTESTINGMOBILE 1
+#define ISTESTINGMOBILE 0u
 
 #define u8 uint8_t
 #define u16 u16
@@ -75,8 +75,8 @@ CrossTexture* bigBackground=NULL;
 CrossTexture** bgPartsEmpty=NULL;
 CrossTexture** bgPartsLabel=NULL;
 
-CrossTexture** noteImages;
-CROSSSFX** noteSounds;
+CrossTexture** noteImages=NULL;
+CROSSSFX*** noteSounds=NULL;
 
 u8** songArray;
 
@@ -101,7 +101,7 @@ void* recalloc(void* _oldBuffer, int _oldSize, int _newSize){
 // I thought about it. This function is so small, it wouldn't be worth it to just make a helper function for all arrays I want to resize.
 void setSongWidth(u8** _passedArray, u16 _passedOldWidth, u16 _passedWidth){
 	int i;
-	for (i=0;i<pageHeight;++i){
+	for (i=0;i<songHeight;++i){
 		_passedArray[i] = recalloc(_passedArray[i],_passedOldWidth,_passedWidth);
 	}
 }
@@ -127,6 +127,21 @@ void XOutFunction(){
 	exit(0);
 }
 
+void setTotalNotes(u16 _newTotal){
+	if (_newTotal<=totalNotes){
+		return;
+	}
+	noteImages = realloc(noteImages,sizeof(CrossTexture*)*_newTotal);
+	noteSounds = realloc(noteSounds,sizeof(CROSSSFX**)*_newTotal);
+
+	int i;
+	for (i=totalNotes;i<_newTotal;++i){
+		noteSounds[i] = malloc(songHeight*sizeof(CROSSSFX*));
+	}
+
+	totalNotes = _newTotal;
+}
+
 // string
 int L_loadSound(lua_State* passedState){
 	char* _fixedPath = possiblyFixPath(lua_tostring(passedState,1), (lua_gettop(passedState)==2 && lua_toboolean(passedState,2)==0) ? 0 : 1);
@@ -149,7 +164,7 @@ int L_setBgParts(lua_State* passedState){
 	backgroundMode=BGMODE_PART;
 	bgPartsEmpty = malloc(sizeof(CrossTexture*)*songHeight);
 	bgPartsLabel = malloc(sizeof(CrossTexture*)*songHeight);
-	u8 i;
+	int i;
 	for (i=0;i<songHeight;++i){
 		// Get empty image
 		lua_rawgeti(passedState,1,i+1);
@@ -171,10 +186,19 @@ int L_setBigBg(lua_State* passedState){
 }
 // <int slot> <loaded image> <table of loaded sounds 14 elements long>
 int L_addNote(lua_State* passedState){
-	int _passedNote = lua_tonumber(passedState,1);
-	if (_passedNote>totalNotes-1){
+	int _passedSlot = lua_tonumber(passedState,1);
+	// Don't need to check if we're actually adding
+	setTotalNotes(_passedSlot+1);
 
+	noteImages[_passedSlot] = lua_touserdata(passedState,2);
+
+	int i;
+	for (i=0;i<songHeight;++i){
+		lua_rawgeti(passedState,3,i+1);
+		noteSounds[_passedSlot][i] = lua_touserdata(passedState,-1);
+		lua_pop(passedState,1);
 	}
+
 	return 0;
 }
 
@@ -189,6 +213,7 @@ void pushLuaFunctions(){
 
 void init(){
 	initGraphics(832,480,&screenWidth,&screenHeight);
+	initAudio();
 	setClearColor(192,192,192,255);
 	if (screenWidth!=832 || screenHeight!=480){
 		isMobile=1;
@@ -225,14 +250,11 @@ void init(){
 	luaL_openlibs(L);
 	pushLuaFunctions();
 
-	songArray = calloc(1,sizeof(u8*)*14);
+	songArray = calloc(1,sizeof(u8*)*songHeight);
 	setSongWidth(songArray,0,400);
 	songWidth=400;
 
-	noteImages = calloc(1,sizeof(CrossTexture*)*totalNotes);
-
-	//fixPath("assets/Free/Images/bigBG.png",tempPathFixBuffer,TYPE_EMBEDDED);
-	//bigBackground = loadPNG(tempPathFixBuffer);
+	setTotalNotes(1);
 
 	// Very last, run the init script
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);

@@ -1,3 +1,4 @@
+-- Step 1 - Set up song board UI
 if (isMobile()) then
 	myBGPartTableEmpty = {};
 	myBGPartyTableLabel = {};
@@ -24,3 +25,17 @@ else
 	-- Calling this changes the background mode.
 	setBigBg("assets/Free/Images/pcBackground.png");
 end
+
+
+-- Add notes
+
+-- Reuse these three arrays. Make all three then add all three at once and repeat.
+myNoteArray = {};
+myNoteSharpArray = {};
+myNoteFlatArray = {};
+
+-- THS IS TEST CODE
+for i=1,14 do
+	myNoteArray[i] = loadSound(string.format("assets/Proprietary/Sound/piano_%d.wav",i));
+end
+addNote(1,loadImage("assets/Proprietary/Images/piano.png"),myNoteArray);
