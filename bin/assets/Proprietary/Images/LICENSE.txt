@@ -1,0 +1,8 @@
+Credit for these image files goes to Growtopia and Ubisoft. Some or all of the images have been modified by me.
+
+Terms of use (https://growtopiagame.com/faq/detail/using-growtopia-assets-for-apps-and-websites):
+You have our permission to use the sprite sheet as long as the following conditions are met: 
+    * You will credit Growtopia and Ubisoft for the assets used;
+    * You will not charge users for the app or pack you create, nor offer IAPs;
+    * The app created will not be a game on its own, but a helpful tool for Growtopia users (such as a companion app);
+    * The app will not break the game's Terms and Conditions in any way. 
