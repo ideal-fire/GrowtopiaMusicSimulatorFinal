@@ -35,6 +35,9 @@ Shoujo☆Kageki_Revue_Starlight
 #define BGMODE_SINGLE 1
 #define BGMODE_PART 2
 
+#define UNIQUE_SELICON 1 // Stands for "select icon"
+#define UNIQUE_PLAY 2
+
 #define LUAREGISTER(x,y) lua_pushcfunction(L,x);\
 	lua_setglobal(L,y);
 
@@ -43,6 +46,7 @@ typedef void(*voidFunc)();
 typedef struct{
 	CrossTexture* image;
 	voidFunc activateFunc;
+	s16 uniqueId;
 }uiElement;
 ////////////////////////////////////////////////
 u8 optionPlayOnPlace=1;
@@ -67,8 +71,6 @@ double generalScale;
 u16 singleBlockSize=32;
 
 u8 isMobile;
-
-u16 gottenNoteIconIndex=0;
 
 s32 selectedNote=0;
 u16 totalNotes=0;
@@ -95,8 +97,23 @@ CROSSSFX*** noteSounds=NULL;
 
 u8** songArray;
 
+uiElement* getUIByID(s16 _passedId){
+	int i;
+	for (i=0;i<totalUI;++i){
+		if (myUIBar[i].uniqueId==_passedId){
+			return &(myUIBar[i]);
+		}
+	}
+	return NULL;
+}
+
 void updateNoteIcon(){
-	myUIBar[gottenNoteIconIndex].image=noteImages[selectedNote];
+	uiElement* _noteIconElement = getUIByID(UNIQUE_SELICON);
+	if (_noteIconElement!=NULL){
+		_noteIconElement->image=noteImages[selectedNote];
+	}else{
+		printf("Couldn't find the note icon with id %d. You didn't delete it, right?",UNIQUE_SELICON);
+	}
 }
 
 void uiPlay(){
@@ -122,6 +139,7 @@ int fixY(int _y){
 uiElement* addUI(){
 	++totalUI;
 	myUIBar = realloc(myUIBar,sizeof(myUIBar)*totalUI);
+	myUIBar[totalUI-1].uniqueId=-1;
 	return &(myUIBar[totalUI-1]);
 }
 
@@ -328,19 +346,18 @@ void init(){
 
 	// Init note array before we do the Lua
 	setTotalNotes(1);
-	setTotalNotes(5);
 	noteImages[0] = loadEmbeddedPNG("assets/Free/Images/grid.png");
-
 
 	// Set up UI
 	uiElement* _newButton = addUI();
 	_newButton->image = NULL;
 	_newButton->activateFunc = uiNoteIcon;
-	gottenNoteIconIndex = totalUI-1;
+	_newButton->uniqueId = UNIQUE_SELICON;
 
 	_newButton = addUI();
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/playButton.png");
 	_newButton->activateFunc = uiPlay;
+	_newButton->uniqueId = UNIQUE_PLAY;
 
 	// Very last, run the init script
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
