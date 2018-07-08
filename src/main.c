@@ -1,10 +1,10 @@
 /*
-   -   _   |---|  | --  -----     /   /
-  / \ / |  |   |  |/    |   |    / \ / 
- /  |/  |  |   |  |     |   |   /  |/ 
-/   |   |  -----  |     -----  /   |
-
 //https://www.lua.org/manual/5.3/manual.html#lua_pushlightuserdata
+
+todo - Add volume setting. Morons want it and don't know how to use volume mixer
+
+add 4px terminal padding
+Shoujo☆Kageki_Revue_Starlight
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,10 +22,11 @@
 #include <Lua/lualib.h>
 #include <Lua/lauxlib.h>
 
-#define ISTESTINGMOBILE 0u
+#define ISTESTINGMOBILE 0
+#define DISABLESOUND 0
 
 #define u8 uint8_t
-#define u16 u16
+#define u16 uint16_t
 #define u32 uint32_t
 #define s8 int8_t
 #define s16 int16_t
@@ -38,7 +39,14 @@
 	lua_setglobal(L,y);
 
 ////////////////////////////////////////////////
-
+typedef void(*voidFunc)();
+typedef struct{
+	CrossTexture* image;
+	voidFunc activateFunc;
+}uiElement;
+////////////////////////////////////////////////
+u8 optionPlayOnPlace=1;
+////////////////////////////////////////////////
 int screenWidth;
 int screenHeight;
 int logicalScreenWidth;
@@ -47,6 +55,9 @@ int globalDrawXOffset;
 int globalDrawYOffset;
 
 lua_State* L = NULL;
+
+u16 totalUI=0;
+uiElement* myUIBar;
 
 u16 songWidth=400;
 u16 songHeight=14;
@@ -57,7 +68,10 @@ u16 singleBlockSize=32;
 
 u8 isMobile;
 
-u16 totalNotes=1;
+u16 gottenNoteIconIndex=0;
+
+s32 selectedNote=0;
+u16 totalNotes=0;
 
 // Only the width of a page can change and it depends on the scale set by the user
 u16 pageWidth=25;
@@ -65,8 +79,9 @@ u16 pageWidth=25;
 
 // How much of the page's height you can see without scrolling
 u16 visiblePageHeight;
-// Scroll offset in the page height
-u8 pageHeightScroll;
+// These are display offsets
+u16 songYOffset=0;
+u16 songXOffset=0;
 
 // 0 for normal PC mode
 // 1 for split mobile mode
@@ -80,11 +95,34 @@ CROSSSFX*** noteSounds=NULL;
 
 u8** songArray;
 
+void updateNoteIcon(){
+	myUIBar[gottenNoteIconIndex].image=noteImages[selectedNote];
+}
+
+void uiPlay(){
+
+}
+
+void uiNoteIcon(){
+	selectedNote++;
+	if (selectedNote==totalNotes){
+		selectedNote=0;
+	}
+	updateNoteIcon();
+}
+
 int fixX(int _x){
 	return _x+globalDrawXOffset;
 }
+
 int fixY(int _y){
 	return _y+globalDrawYOffset;
+}
+
+uiElement* addUI(){
+	++totalUI;
+	myUIBar = realloc(myUIBar,sizeof(myUIBar)*totalUI);
+	return &(myUIBar[totalUI-1]);
 }
 
 // realloc, but new memory is zeroed out
@@ -110,6 +148,14 @@ void drawImageScaleAlt(CrossTexture* _passedTexture, int _x, int _y, double _pas
 	if (_passedTexture!=NULL){
 		drawTextureScale(_passedTexture,_x,_y,_passedXScale,_passedYScale);
 	}
+}
+
+CrossTexture* loadEmbeddedPNG(const char* _passedFilename){
+	char* _fixedPathBuffer = malloc(strlen(_passedFilename)+strlen(getFixPathString(TYPE_EMBEDDED)+1));
+	fixPath((char*)_passedFilename,_fixedPathBuffer,TYPE_EMBEDDED);
+	CrossTexture* _loadedTexture = loadPNG(_fixedPathBuffer);
+	free(_fixedPathBuffer);
+	return _loadedTexture;
 }
 
 // Return a path that may or may not be fixed to TYPE_EMBEDDED
@@ -191,7 +237,8 @@ int L_addNote(lua_State* passedState){
 	setTotalNotes(_passedSlot+1);
 
 	noteImages[_passedSlot] = lua_touserdata(passedState,2);
-
+	
+	// Load array data
 	int i;
 	for (i=0;i<songHeight;++i){
 		lua_rawgeti(passedState,3,i+1);
@@ -209,6 +256,30 @@ void pushLuaFunctions(){
 	LUAREGISTER(L_getMobile,"isMobile");
 	LUAREGISTER(L_loadSound,"loadSound");
 	LUAREGISTER(L_loadImage,"loadImage");
+}
+
+void die(const char* message) {
+  printf("%s\n", message);
+  exit(EXIT_FAILURE);
+}
+
+void goodLuaDofile(lua_State* passedState, char* _passedFilename){
+	if (luaL_dofile(passedState, _passedFilename) != LUA_OK) {
+		die(lua_tostring(L,-1));
+	}
+}
+
+void goodPlaySound(CROSSSFX* _passedSound){
+	#if !DISABLESOUND
+		playSound(_passedSound,1,0);
+	#endif
+}
+
+void placeNote(int _x, int _y, u16 _noteId){
+	if (songArray[_y][_x]!=_noteId && noteSounds[_noteId][_y]!=NULL && optionPlayOnPlace){
+		goodPlaySound(noteSounds[_noteId][_y]);
+	}
+	songArray[_y][_x]=_noteId;
 }
 
 void init(){
@@ -244,6 +315,7 @@ void init(){
 		visiblePageHeight=15;
 	}
 	visiblePageHeight--; // Leave a space for the toolbar.
+
 	pageWidth = (logicalScreenWidth/singleBlockSize)-1;
 
 	L = luaL_newstate();
@@ -254,21 +326,75 @@ void init(){
 	setSongWidth(songArray,0,400);
 	songWidth=400;
 
+	// Init note array before we do the Lua
 	setTotalNotes(1);
+	setTotalNotes(5);
+	noteImages[0] = loadEmbeddedPNG("assets/Free/Images/grid.png");
+
+
+	// Set up UI
+	uiElement* _newButton = addUI();
+	_newButton->image = NULL;
+	_newButton->activateFunc = uiNoteIcon;
+	gottenNoteIconIndex = totalUI-1;
+
+	_newButton = addUI();
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/playButton.png");
+	_newButton->activateFunc = uiPlay;
 
 	// Very last, run the init script
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
-	luaL_dofile(L,tempPathFixBuffer);
+	goodLuaDofile(L,tempPathFixBuffer);
+
+	// Hopefully we've added some note images in the init.lua.
+	updateNoteIcon();
 }
 
+
+
 int main(int argc, char *argv[]){
+	selectedNote=1;
 	init();
+	
 	while(1){
+		int i;
 		controlsStart();
+		if (isDown(SCE_TOUCH)){
+			// We need to use floor so that negatives are not made positive
+			int _placeX = floor((touchX-globalDrawXOffset)/singleBlockSize);
+			int _placeY = floor((touchY-globalDrawYOffset)/singleBlockSize);
+			if (_placeY==visiblePageHeight){ // If we click the UI section
+				if (wasJustPressed(SCE_TOUCH)){
+					for (i=0;i<totalUI;++i){
+						if (_placeX==i){
+							myUIBar[i].activateFunc();
+						}
+					}
+				}
+			}else{ // If we click the main section
+				if (!(_placeX>=pageWidth || _placeX<0)){ // In bounds in the main section, I mean.
+					placeNote(_placeX+songXOffset,_placeY+songYOffset,selectedNote);
+				}
+			}
+		}
+		if (wasJustPressed(SCE_MOUSE_SCROLL)){
+			if (mouseScroll<0){
+				selectedNote--;
+				if (selectedNote<0){
+					selectedNote=totalNotes-1;
+				}
+				updateNoteIcon();
+			}else if (mouseScroll>0){
+				selectedNote++;
+				if (selectedNote==totalNotes){
+					selectedNote=0;
+				}
+				updateNoteIcon();
+			}// 0 scroll is ignored
+		}
 		controlsEnd();
 
 		startDrawing();
-		int i;
 		if (backgroundMode==BGMODE_SINGLE){
 			drawImageScaleAlt(bigBackground,0,0,generalScale,generalScale);
 		}
@@ -287,6 +413,11 @@ int main(int argc, char *argv[]){
 			if (backgroundMode==BGMODE_PART){
 				drawImageScaleAlt(bgPartsLabel[i],pageWidth*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
 			}
+		}
+
+
+		for (i=0;i<totalUI;++i){
+			drawImageScaleAlt(myUIBar[i].image,i*singleBlockSize,visiblePageHeight*singleBlockSize,generalScale,generalScale);
 		}
 		endDrawing();
 	}
