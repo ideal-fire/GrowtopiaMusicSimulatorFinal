@@ -1,7 +1,11 @@
 /*
-//https://www.lua.org/manual/5.3/manual.html#lua_pushlightuserdata
+https://www.lua.org/manual/5.3/manual.html#lua_pushlightuserdata
+https://github.com/mlabbe/nativefiledialog
+
 
 todo - Add volume setting. Morons want it and don't know how to use volume mixer
+todo - note names are useless for anything but audio gears, note counter can display icons
+
 
 add 4px terminal padding
 Shoujo☆Kageki_Revue_Starlight
@@ -24,6 +28,8 @@ Shoujo☆Kageki_Revue_Starlight
 
 #define ISTESTINGMOBILE 0
 #define DISABLESOUND 0
+#define DOFANCYPAGE 1
+#define DOCENTERPLAY 0
 
 #define u8 uint8_t
 #define u16 uint16_t
@@ -37,6 +43,7 @@ Shoujo☆Kageki_Revue_Starlight
 
 #define UNIQUE_SELICON 1 // Stands for "select icon"
 #define UNIQUE_PLAY 2
+#define UNIQUE_YPLAY 3
 
 #define LUAREGISTER(x,y) lua_pushcfunction(L,x);\
 	lua_setglobal(L,y);
@@ -48,6 +55,14 @@ typedef struct{
 	voidFunc activateFunc;
 	s16 uniqueId;
 }uiElement;
+typedef struct{
+	u8 id;
+	void* extraData; // For audio gears, this could be their data. For repeat notes, it could be temp data about if they've been used or not.
+}noteSpot;
+void drawSong();
+void drawUI();
+void playColumn(s32 _columnNumber);
+void pageTransition(int _destX);
 ////////////////////////////////////////////////
 u8 optionPlayOnPlace=1;
 ////////////////////////////////////////////////
@@ -61,7 +76,13 @@ int globalDrawYOffset;
 lua_State* L = NULL;
 
 u16 totalUI=0;
-uiElement* myUIBar;
+u16 totalVisibleUI=0;
+u16 uiScrollOffset=0;
+uiElement* myUIBar=NULL;
+
+CrossTexture* playButtonImage;
+CrossTexture* stopButtonImage;
+CrossTexture* yellowPlayButtonImage;
 
 u16 songWidth=400;
 u16 songHeight=14;
@@ -75,6 +96,10 @@ u8 isMobile;
 s32 selectedNote=0;
 u16 totalNotes=0;
 
+u8 currentlyPlaying=0;
+s32 currentPlayPosition;
+u64 lastPlayAdvance=0;
+
 // Only the width of a page can change and it depends on the scale set by the user
 u16 pageWidth=25;
 #define pageHeight 14
@@ -82,8 +107,8 @@ u16 pageWidth=25;
 // How much of the page's height you can see without scrolling
 u16 visiblePageHeight;
 // These are display offsets
-u16 songYOffset=0;
-u16 songXOffset=0;
+s32 songYOffset=0;
+s32 songXOffset=0;
 
 // 0 for normal PC mode
 // 1 for split mobile mode
@@ -95,7 +120,36 @@ CrossTexture** bgPartsLabel=NULL;
 CrossTexture** noteImages=NULL;
 CROSSSFX*** noteSounds=NULL;
 
-u8** songArray;
+noteSpot** songArray;
+
+u32 bpm=100;
+
+////////////////////////////////////////////////
+
+u32 bpmFormula(u32 re){
+	return 60000 / (4 * re);
+}
+// Given note wait time, find BPM
+u32 reverseBPMformula(u32 re){
+	return 15000/re;
+}
+
+void centerAround(u32 _passedPosition){
+	#if DOCENTERPLAY
+		u16 _halfScreenWidth = ceil(pageWidth/2);
+		if (_passedPosition<_halfScreenWidth){
+			songXOffset=0;
+			return;
+		}
+		if (_passedPosition>songWidth-1-_halfScreenWidth){
+			songXOffset = songWidth-1-pageWidth;
+			return;
+		}
+		songXOffset = _passedPosition-_halfScreenWidth;
+	#else
+		songXOffset = (_passedPosition/pageWidth)*pageWidth;
+	#endif
+}
 
 uiElement* getUIByID(s16 _passedId){
 	int i;
@@ -104,6 +158,7 @@ uiElement* getUIByID(s16 _passedId){
 			return &(myUIBar[i]);
 		}
 	}
+	printf("Couldn't find the UI with id %d. You didn't delete it, right?",_passedId);
 	return NULL;
 }
 
@@ -111,13 +166,114 @@ void updateNoteIcon(){
 	uiElement* _noteIconElement = getUIByID(UNIQUE_SELICON);
 	if (_noteIconElement!=NULL){
 		_noteIconElement->image=noteImages[selectedNote];
-	}else{
-		printf("Couldn't find the note icon with id %d. You didn't delete it, right?",UNIQUE_SELICON);
 	}
 }
 
-void uiPlay(){
+void togglePlayUI(){
+	uiElement* _playButtonUI = getUIByID(UNIQUE_PLAY);
+	if (_playButtonUI->image==stopButtonImage){
+		_playButtonUI->image = playButtonImage;
+	}else{
+		_playButtonUI->image = stopButtonImage;
+	}
+	_playButtonUI = getUIByID(UNIQUE_YPLAY);
+	if (_playButtonUI->image==stopButtonImage){
+		_playButtonUI->image = yellowPlayButtonImage;
+	}else{
+		_playButtonUI->image = stopButtonImage;
+	}
+}
 
+void playAtPosition(s32 _startPosition){
+	if (!currentlyPlaying){
+		pageTransition(_startPosition);
+		songXOffset=_startPosition;
+		togglePlayUI();
+		currentlyPlaying=1;
+		currentPlayPosition = songXOffset;
+		lastPlayAdvance=getTicks();
+		centerAround(currentPlayPosition);
+		playColumn(currentPlayPosition);
+	}else{
+		togglePlayUI();
+		currentlyPlaying=0;
+		songXOffset = (currentPlayPosition/pageWidth)*pageWidth;
+	}
+}
+
+void uiYellowPlay(){
+	playAtPosition(songXOffset);
+}
+
+void uiPlay(){
+	playAtPosition(0);
+}
+
+void pageTransition(int _destX){
+	#if DOFANCYPAGE
+		int _positiveDest=songWidth;
+		int _negativeDest=-1;
+		int _changeAmount = (_destX-songXOffset)/30;
+		if (_changeAmount==0){
+			if (_destX-songXOffset<0){
+				_changeAmount=-1;
+			}else{
+				_changeAmount=1;
+			}
+		}
+		if (_destX<songXOffset){
+			_negativeDest = _destX;
+		}else if (_destX>songXOffset){
+			_positiveDest = _destX;
+		}else{
+			//printf("Bad, are equal, nothing to do.\n");
+			return;
+		}
+		while(1){
+			songXOffset+=_changeAmount;
+			if (songXOffset>=_positiveDest){
+				songXOffset = _positiveDest;
+				break;
+			}
+			if (songXOffset<=_negativeDest){
+				songXOffset = _negativeDest;
+				break;
+			}
+			startDrawing();
+			drawSong();
+			drawUI();
+			endDrawing();
+		}
+	#else
+		songXOffset = _destX;
+	#endif
+}
+
+void uiUp(){
+	if (songYOffset!=0){
+		songYOffset--;
+	}
+}
+void uiDown(){
+	songYOffset++;
+	if (songYOffset+visiblePageHeight>pageHeight){
+		songYOffset = pageHeight-visiblePageHeight;
+	}
+}
+
+void uiRight(){
+	if (songXOffset+pageWidth>=songWidth-1){
+		pageTransition(0);
+	}else{
+		pageTransition(songXOffset+pageWidth);
+	}
+}
+void uiLeft(){
+	if (songXOffset<pageWidth){
+		pageTransition(songWidth-1-pageWidth);
+	}else{
+		pageTransition(songXOffset-pageWidth);
+	}
 }
 
 void uiNoteIcon(){
@@ -138,7 +294,7 @@ int fixY(int _y){
 
 uiElement* addUI(){
 	++totalUI;
-	myUIBar = realloc(myUIBar,sizeof(myUIBar)*totalUI);
+	myUIBar = realloc(myUIBar,sizeof(uiElement)*totalUI);
 	myUIBar[totalUI-1].uniqueId=-1;
 	return &(myUIBar[totalUI-1]);
 }
@@ -155,10 +311,10 @@ void* recalloc(void* _oldBuffer, int _oldSize, int _newSize){
 
 // Can't change song height
 // I thought about it. This function is so small, it wouldn't be worth it to just make a helper function for all arrays I want to resize.
-void setSongWidth(u8** _passedArray, u16 _passedOldWidth, u16 _passedWidth){
+void setSongWidth(noteSpot** _passedArray, u16 _passedOldWidth, u16 _passedWidth){
 	int i;
 	for (i=0;i<songHeight;++i){
-		_passedArray[i] = recalloc(_passedArray[i],_passedOldWidth,_passedWidth);
+		_passedArray[i] = recalloc(_passedArray[i],_passedOldWidth*sizeof(noteSpot),_passedWidth*sizeof(noteSpot));
 	}
 }
 
@@ -169,7 +325,7 @@ void drawImageScaleAlt(CrossTexture* _passedTexture, int _x, int _y, double _pas
 }
 
 CrossTexture* loadEmbeddedPNG(const char* _passedFilename){
-	char* _fixedPathBuffer = malloc(strlen(_passedFilename)+strlen(getFixPathString(TYPE_EMBEDDED)+1));
+	char* _fixedPathBuffer = malloc(strlen(_passedFilename)+strlen(getFixPathString(TYPE_EMBEDDED))+1);
 	fixPath((char*)_passedFilename,_fixedPathBuffer,TYPE_EMBEDDED);
 	CrossTexture* _loadedTexture = loadPNG(_fixedPathBuffer);
 	free(_fixedPathBuffer);
@@ -267,6 +423,29 @@ int L_addNote(lua_State* passedState){
 	return 0;
 }
 
+int L_swapUI(lua_State* passedState){
+	int _slot1 = lua_tonumber(passedState,1);
+	int _slot2 = lua_tonumber(passedState,2);
+	uiElement _tempSwapHold = myUIBar[_slot1];
+	myUIBar[_slot1] = myUIBar[_slot2];
+	myUIBar[_slot2]=_tempSwapHold;
+	return 0;
+}
+
+int L_deleteUI(lua_State* passedState){
+	int _slotIHate = lua_tonumber(passedState,1);
+	myUIBar[_slotIHate].image=NULL;
+	myUIBar[_slotIHate].activateFunc=NULL;
+	myUIBar[_slotIHate].uniqueId=-1;
+	return 0;
+}
+// Add a UI slot and return its number
+int L_addUI(lua_State* passedState){
+	addUI();
+	lua_pushnumber(passedState,totalUI-1);
+	return 1;
+}
+
 void pushLuaFunctions(){
 	LUAREGISTER(L_addNote,"addNote");
 	LUAREGISTER(L_setBigBg,"setBigBg");
@@ -274,10 +453,13 @@ void pushLuaFunctions(){
 	LUAREGISTER(L_getMobile,"isMobile");
 	LUAREGISTER(L_loadSound,"loadSound");
 	LUAREGISTER(L_loadImage,"loadImage");
+	LUAREGISTER(L_swapUI,"swapUI");
+	LUAREGISTER(L_deleteUI,"deleteUI");
+	LUAREGISTER(L_addUI,"addUI");
 }
 
-void die(const char* message) {
-  printf("%s\n", message);
+void die(const char* message){
+  printf("die:\n%s\n", message);
   exit(EXIT_FAILURE);
 }
 
@@ -293,16 +475,60 @@ void goodPlaySound(CROSSSFX* _passedSound){
 	#endif
 }
 
+void playColumn(s32 _columnNumber){
+	int i;
+	for (i=0;i<pageHeight;++i){
+		if (songArray[i][_columnNumber].id!=0){
+			goodPlaySound(noteSounds[songArray[i][_columnNumber].id][i]);
+		}
+	}
+}
+
 void placeNote(int _x, int _y, u16 _noteId){
-	if (songArray[_y][_x]!=_noteId && noteSounds[_noteId][_y]!=NULL && optionPlayOnPlace){
+	if (songArray[_y][_x].id!=_noteId && noteSounds[_noteId][_y]!=NULL && optionPlayOnPlace){
 		goodPlaySound(noteSounds[_noteId][_y]);
 	}
-	songArray[_y][_x]=_noteId;
+	songArray[_y][_x].id=_noteId;
+}
+
+void drawPlayBar(int _x){
+	drawRectangle((_x-songXOffset)*singleBlockSize,0,singleBlockSize,visiblePageHeight*singleBlockSize,128,128,128,100);
+}
+
+void drawSong(){
+	int i;
+	if (backgroundMode==BGMODE_SINGLE){
+		drawImageScaleAlt(bigBackground,0,0,generalScale,generalScale);
+	}
+	for (i=0;i<visiblePageHeight;++i){
+		int j;
+		for (j=0;j<pageWidth;++j){
+			if (songArray[i+songYOffset][j+songXOffset].id==0){
+				// If we're doing the special part display mode
+				if (backgroundMode==BGMODE_PART){
+					drawImageScaleAlt(bgPartsEmpty[i+songYOffset],j*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
+				}
+			}else{
+				drawImageScaleAlt(noteImages[songArray[i+songYOffset][j+songXOffset].id],j*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
+			}
+		}
+		if (backgroundMode==BGMODE_PART){
+			drawImageScaleAlt(bgPartsLabel[i+songYOffset],pageWidth*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
+		}
+	}
+}
+
+void drawUI(){
+	int i;
+	for (i=0;i<totalUI;++i){
+		drawImageScaleAlt(myUIBar[i].image,i*singleBlockSize,visiblePageHeight*singleBlockSize,generalScale,generalScale);
+	}
 }
 
 void init(){
 	initGraphics(832,480,&screenWidth,&screenHeight);
 	initAudio();
+	Mix_AllocateChannels(14*2); // We need a lot of channels for all these music notes
 	setClearColor(192,192,192,255);
 	if (screenWidth!=832 || screenHeight!=480){
 		isMobile=1;
@@ -340,7 +566,7 @@ void init(){
 	luaL_openlibs(L);
 	pushLuaFunctions();
 
-	songArray = calloc(1,sizeof(u8*)*songHeight);
+	songArray = calloc(1,sizeof(noteSpot*)*songHeight);
 	setSongWidth(songArray,0,400);
 	songWidth=400;
 
@@ -349,15 +575,49 @@ void init(){
 	noteImages[0] = loadEmbeddedPNG("assets/Free/Images/grid.png");
 
 	// Set up UI
-	uiElement* _newButton = addUI();
+	uiElement* _newButton;
+
+	// Add play button
+	_newButton = addUI();
+	playButtonImage = loadEmbeddedPNG("assets/Free/Images/playButton.png");
+	stopButtonImage = loadEmbeddedPNG("assets/Free/Images/stopButton.png");
+	_newButton->image = playButtonImage;
+	_newButton->activateFunc = uiPlay;
+	_newButton->uniqueId = UNIQUE_PLAY;
+
+	// Add selected note icon
+	_newButton = addUI();
 	_newButton->image = NULL;
 	_newButton->activateFunc = uiNoteIcon;
 	_newButton->uniqueId = UNIQUE_SELICON;
 
+	// Add save Button
 	_newButton = addUI();
-	_newButton->image = loadEmbeddedPNG("assets/Free/Images/playButton.png");
-	_newButton->activateFunc = uiPlay;
-	_newButton->uniqueId = UNIQUE_PLAY;
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/saveButton.png");
+	_newButton->activateFunc = NULL;
+
+	// Add page buttons
+	_newButton = addUI();
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/leftButton.png");
+	_newButton->activateFunc = uiLeft;
+	_newButton = addUI();
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/rightButton.png");
+	_newButton->activateFunc = uiRight;
+	if (visiblePageHeight!=pageHeight){
+		_newButton = addUI();
+		_newButton->image = loadEmbeddedPNG("assets/Free/Images/upButton.png");
+		_newButton->activateFunc = uiUp;
+		_newButton = addUI();
+		_newButton->image = loadEmbeddedPNG("assets/Free/Images/downButton.png");
+		_newButton->activateFunc = uiDown;
+	}
+
+	// Add yellow play button
+	_newButton = addUI();
+	yellowPlayButtonImage = loadEmbeddedPNG("assets/Free/Images/yellowPlayButton.png");
+	_newButton->image = yellowPlayButtonImage;
+	_newButton->activateFunc = uiYellowPlay;
+	_newButton->uniqueId = UNIQUE_YPLAY;
 
 	// Very last, run the init script
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
@@ -367,12 +627,11 @@ void init(){
 	updateNoteIcon();
 }
 
-
-
 int main(int argc, char *argv[]){
 	selectedNote=1;
 	init();
-	
+	// If not -1, draw a red rectangle at this UI slot
+	s32 _uiSelectedHighlight=-1;
 	while(1){
 		int i;
 		controlsStart();
@@ -384,7 +643,9 @@ int main(int argc, char *argv[]){
 				if (wasJustPressed(SCE_TOUCH)){
 					for (i=0;i<totalUI;++i){
 						if (_placeX==i){
+							drawRectangle(i*singleBlockSize,pageHeight*singleBlockSize,singleBlockSize,singleBlockSize,255,0,0,100);
 							myUIBar[i].activateFunc();
+							_uiSelectedHighlight=i;
 						}
 					}
 				}
@@ -411,30 +672,27 @@ int main(int argc, char *argv[]){
 		}
 		controlsEnd();
 
+		// Process playing
+		if (currentlyPlaying){
+			if (getTicks()>=lastPlayAdvance+bpmFormula(bpm)){
+				lastPlayAdvance = getTicks();
+				currentPlayPosition++;
+				centerAround(currentPlayPosition);
+				playColumn(currentPlayPosition);
+			}
+		}
+
+		// Start drawing
 		startDrawing();
-		if (backgroundMode==BGMODE_SINGLE){
-			drawImageScaleAlt(bigBackground,0,0,generalScale,generalScale);
+		drawSong();
+		if (currentlyPlaying){
+			drawPlayBar(currentPlayPosition);
 		}
-		for (i=0;i<visiblePageHeight;++i){
-			int j;
-			for (j=0;j<pageWidth;++j){
-				if (songArray[i][j]==0){
-					// If we're doing the special part display mode
-					if (backgroundMode==BGMODE_PART){
-						drawImageScaleAlt(bgPartsEmpty[i],j*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
-					}
-				}else{
-					drawImageScaleAlt(noteImages[songArray[i][j]],j*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
-				}
-			}
-			if (backgroundMode==BGMODE_PART){
-				drawImageScaleAlt(bgPartsLabel[i],pageWidth*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
-			}
-		}
-
-
-		for (i=0;i<totalUI;++i){
-			drawImageScaleAlt(myUIBar[i].image,i*singleBlockSize,visiblePageHeight*singleBlockSize,generalScale,generalScale);
+		drawUI();
+		// If we need to draw UI highlight
+		if (_uiSelectedHighlight!=-1){
+			drawRectangle(_uiSelectedHighlight*singleBlockSize,visiblePageHeight*singleBlockSize,singleBlockSize,singleBlockSize,0,0,0,100);
+			_uiSelectedHighlight=-1;
 		}
 		endDrawing();
 	}
