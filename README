@@ -1,0 +1,4 @@
+Final Growtopia Music Simulator.
+
+Supports any platform that supports SDL2. This includes Windows, (GNU+)Linux, Android, macOS, and iOS.
+	There will never be an iOS version unless somebody buys me a developer account. I can't be bothered to make a compiling tutorial for MacOS.
