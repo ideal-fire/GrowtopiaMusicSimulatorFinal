@@ -1,0 +1,3 @@
+cd bin
+valgrind --track-origins=yes --leak-check=full --show-leak-kinds=definite ./a.exe
+cd ..

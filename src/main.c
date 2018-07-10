@@ -2,29 +2,25 @@
 https://www.lua.org/manual/5.3/manual.html#lua_pushlightuserdata
 https://github.com/mlabbe/nativefiledialog
 
-
 todo - Add volume setting. Morons want it and don't know how to use volume mixer
 todo - note names are useless for anything but audio gears, note counter can display icons
-
-
-add 4px terminal padding
-Shoujo☆Kageki_Revue_Starlight
+todo - don't forget to add audio gear volume setting
 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 
-#include <GeneralGood/GeneralGoodConfig.h>
-#include <GeneralGood/GeneralGood.h>
-#include <GeneralGood/GeneralGoodExtended.h>
-#include <GeneralGood/GeneralGoodGraphics.h>
-#include <GeneralGood/GeneralGoodSound.h>
-#include <GeneralGood/GeneralGoodText.h>
-#include <GeneralGood/GeneralGoodImages.h>
+#include <GeneralGoodConfig.h>
+#include <GeneralGood.h>
+#include <GeneralGoodExtended.h>
+#include <GeneralGoodGraphics.h>
+#include <GeneralGoodSound.h>
+#include <GeneralGoodText.h>
+#include <GeneralGoodImages.h>
 
-#include <Lua/lua.h>
-#include <Lua/lualib.h>
-#include <Lua/lauxlib.h>
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 
 #define ISTESTINGMOBILE 0
 #define DISABLESOUND 0
@@ -335,7 +331,7 @@ CrossTexture* loadEmbeddedPNG(const char* _passedFilename){
 // Return a path that may or may not be fixed to TYPE_EMBEDDED
 char* possiblyFixPath(const char* _passedFilename, char _shouldFix){
 	if (_shouldFix){
-		char* _fixedPathBuffer = malloc(strlen(_passedFilename)+strlen(getFixPathString(TYPE_EMBEDDED)+1));
+		char* _fixedPathBuffer = malloc(strlen(_passedFilename)+strlen(getFixPathString(TYPE_EMBEDDED))+1);
 		fixPath((char*)_passedFilename,_fixedPathBuffer,TYPE_EMBEDDED);
 		return _fixedPathBuffer;
 	}else{
@@ -405,6 +401,7 @@ int L_setBigBg(lua_State* passedState){
 	return 0;
 }
 // <int slot> <loaded image> <table of loaded sounds 14 elements long>
+// Third argument is optional to disable sound effect
 int L_addNote(lua_State* passedState){
 	int _passedSlot = lua_tonumber(passedState,1);
 	// Don't need to check if we're actually adding
@@ -412,14 +409,20 @@ int L_addNote(lua_State* passedState){
 
 	noteImages[_passedSlot] = lua_touserdata(passedState,2);
 	
-	// Load array data
-	int i;
-	for (i=0;i<songHeight;++i){
-		lua_rawgeti(passedState,3,i+1);
-		noteSounds[_passedSlot][i] = lua_touserdata(passedState,-1);
-		lua_pop(passedState,1);
+	if (lua_gettop(passedState)==3){
+		// Load array data
+		int i;
+		for (i=0;i<songHeight;++i){
+			lua_rawgeti(passedState,3,i+1);
+			noteSounds[_passedSlot][i] = lua_touserdata(passedState,-1);
+			lua_pop(passedState,1);
+		}
+	}else{
+		int i;
+		for (i=0;i<songHeight;++i){
+			noteSounds[_passedSlot][i] = NULL;
+		}
 	}
-
 	return 0;
 }
 
@@ -471,7 +474,9 @@ void goodLuaDofile(lua_State* passedState, char* _passedFilename){
 
 void goodPlaySound(CROSSSFX* _passedSound){
 	#if !DISABLESOUND
-		playSound(_passedSound,1,0);
+		if (_passedSound!=NULL){
+			playSound(_passedSound,1,0);
+		}
 	#endif
 }
 
@@ -643,8 +648,11 @@ int main(int argc, char *argv[]){
 				if (wasJustPressed(SCE_TOUCH)){
 					for (i=0;i<totalUI;++i){
 						if (_placeX==i){
-							drawRectangle(i*singleBlockSize,pageHeight*singleBlockSize,singleBlockSize,singleBlockSize,255,0,0,100);
-							myUIBar[i].activateFunc();
+							if (myUIBar[i].activateFunc==NULL){
+								printf("NULL activateFunc for %d\n",i);
+							}else{
+								myUIBar[i].activateFunc();
+							}
 							_uiSelectedHighlight=i;
 						}
 					}
