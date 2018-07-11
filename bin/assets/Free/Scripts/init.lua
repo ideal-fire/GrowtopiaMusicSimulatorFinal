@@ -156,6 +156,10 @@ if (isMobile()) then
 		-- Octave loop
 		myBGPartTableEmpty[i+8] = myBGPartTableEmpty[i+1];
 
+		
+	end
+
+	for i=0,13 do
 		-- Do note labels next. Fun fact, this note label feature was coincidentally used in somebody else's Growtopia Music Simulator....except he put the labels on the left side. What? I'm not implying anything.
 		myBGPartyTableLabel[i+1] = loadImage(string.format("assets/Free/Images/PartBG/label%d.png",i));
 		myBGPartyTableLabel[i+8] = myBGPartyTableLabel[i+1];
@@ -201,6 +205,9 @@ addNote(13,loadImage("assets/Proprietary/Images/repeatEnd.png"));
 
 -- Add the spooky note. It doesn't have a flat or sharp friend, so we use a different function to load the sounds
 addSingleNote("assets/Proprietary/Sound/spooky_%d.wav",14,"assets/Proprietary/Images/spooky.png");
+
+-- Add the audio gear
+addNote(15,loadImage("assets/Proprietary/Images/audioGear.png"));
 
 -- Add fltue notes
 addTripleNotes("assets/Proprietary/Sound/flute_%d.wav",16,"assets/Free/Images/flute.png","assets/Free/Images/fluteSharp.png","assets/Free/Images/fluteFlat.png");

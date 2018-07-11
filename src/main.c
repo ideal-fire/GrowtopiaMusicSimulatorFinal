@@ -9,21 +9,23 @@ todo - don't forget to add audio gear volume setting
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <arpa/inet.h> // For htons
 
 #include <GeneralGoodConfig.h>
 #include <GeneralGood.h>
 #include <GeneralGoodExtended.h>
 #include <GeneralGoodGraphics.h>
 #include <GeneralGoodSound.h>
-#include <GeneralGoodText.h>
 #include <GeneralGoodImages.h>
 
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
 
+#include "fonthelper.h"
+
 #define ISTESTINGMOBILE 0
-#define DISABLESOUND 0
+#define DISABLESOUND 1
 #define DOFANCYPAGE 1
 #define DOCENTERPLAY 0
 
@@ -34,6 +36,9 @@ todo - don't forget to add audio gear volume setting
 #define s16 int16_t
 #define s32 int32_t
 
+//#define fileByteOrder(x) htons(x)
+//#define hostByteOrder(x) ntohs(x)
+
 #define BGMODE_SINGLE 1
 #define BGMODE_PART 2
 
@@ -43,6 +48,8 @@ todo - don't forget to add audio gear volume setting
 
 #define LUAREGISTER(x,y) lua_pushcfunction(L,x);\
 	lua_setglobal(L,y);
+
+#define CONSTCHARW (singleBlockSize/2)
 
 ////////////////////////////////////////////////
 typedef void(*voidFunc)();
@@ -59,6 +66,8 @@ void drawSong();
 void drawUI();
 void playColumn(s32 _columnNumber);
 void pageTransition(int _destX);
+void drawImageScaleAlt(CrossTexture* _passedTexture, int _x, int _y, double _passedXScale, double _passedYScale);
+void drawString(char* _passedString, int _x, int _y);
 ////////////////////////////////////////////////
 u8 optionPlayOnPlace=1;
 ////////////////////////////////////////////////
@@ -121,6 +130,10 @@ noteSpot** songArray;
 u32 bpm=100;
 
 ////////////////////////////////////////////////
+
+u16 bitmpTextWidth(char* _passedString){
+	return strlen(_passedString)*(CONSTCHARW);
+}
 
 u32 bpmFormula(u32 re){
 	return 60000 / (4 * re);
@@ -199,6 +212,67 @@ void playAtPosition(s32 _startPosition){
 
 void uiYellowPlay(){
 	playAtPosition(songXOffset);
+}
+
+void uiCount(){
+	controlsEnd();
+	if (totalNotes==1){
+		printf("Phew, prevented division by zero there.");
+		return;
+	}
+	u16 _amountFound[totalNotes-1];
+	int i, j, k;
+	// Zero array
+	for (i=1;i<totalNotes;++i){
+		_amountFound[i-1]=0;
+	}
+	// Fill number array
+	for (i=0;i<songHeight;++i){
+		for (j=0;j<songWidth;++j){
+			if (songArray[i][j].id!=0){
+				++_amountFound[songArray[i][j].id-1];
+			}
+		}
+	}
+	// Convert number array to string
+	char _amountsAsString[totalNotes-1][6]; // up to 99999 for each note
+	u16 _maxFontWidth=0;
+	for (k=1;k<totalNotes;++k){
+		sprintf(_amountsAsString[k-1],"%d",_amountFound[k-1]);
+		if (bitmpTextWidth(_amountsAsString[k-1])>_maxFontWidth){
+			_maxFontWidth = bitmpTextWidth(_amountsAsString[k-1]);
+		}
+	}
+	_maxFontWidth+=CONSTCHARW;
+
+	// Space between
+	u16 _noteVSpace=singleBlockSize+CONSTCHARW; // TODO - Change if I change font size. 
+	u16 _columnTotalNotes = ((pageHeight*singleBlockSize)/_noteVSpace);
+	u16 _totalColumns = ceil((totalNotes-1)/(double)_columnTotalNotes);
+	while (1){
+
+		controlsStart();
+		if (wasJustPressed(SCE_TOUCH)){
+			controlsEnd();
+			break;
+		}
+		controlsEnd();
+
+		startDrawing();
+		u16 _nextNoteDrawId=1;
+		for (i=0;i<_totalColumns;++i){
+			s16 _maxPerColumn=totalNotes-1-i*_columnTotalNotes;
+			if (_maxPerColumn>_columnTotalNotes){
+				_maxPerColumn = _columnTotalNotes;
+			}
+			for (j=0;j<_maxPerColumn;++j){
+				drawImageScaleAlt(noteImages[_nextNoteDrawId],i*_maxFontWidth+singleBlockSize*i,j*_noteVSpace,generalScale,generalScale);
+				drawString(_amountsAsString[_nextNoteDrawId-1],i*_maxFontWidth+singleBlockSize*i+singleBlockSize+CONSTCHARW/2,j*_noteVSpace+CONSTCHARW/2);
+				++_nextNoteDrawId;
+			}
+		}
+		endDrawing();
+	}
 }
 
 void uiPlay(){
@@ -339,6 +413,11 @@ char* possiblyFixPath(const char* _passedFilename, char _shouldFix){
 	}
 }
 
+void drawString(char* _passedString, int _x, int _y){
+	// See fonthelper.h
+	_drawString(_passedString,_x,_y,generalScale,CONSTCHARW);
+}
+
 void XOutFunction(){
 	exit(0);
 }
@@ -352,7 +431,7 @@ void setTotalNotes(u16 _newTotal){
 
 	int i;
 	for (i=totalNotes;i<_newTotal;++i){
-		noteSounds[i] = malloc(songHeight*sizeof(CROSSSFX*));
+		noteSounds[i] = calloc(1,songHeight*sizeof(CROSSSFX*));
 	}
 
 	totalNotes = _newTotal;
@@ -624,6 +703,13 @@ void init(){
 	_newButton->activateFunc = uiYellowPlay;
 	_newButton->uniqueId = UNIQUE_YPLAY;
 
+
+
+	// This should be the last button, it's very useless
+	_newButton = addUI();
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/countButton.png");
+	_newButton->activateFunc = uiCount;
+
 	// Very last, run the init script
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
 	goodLuaDofile(L,tempPathFixBuffer);
@@ -633,8 +719,13 @@ void init(){
 }
 
 int main(int argc, char *argv[]){
+	printf("Loading...\n");
 	selectedNote=1;
 	init();
+	printf("Done loading.\n");
+
+	initEmbeddedFont();
+
 	// If not -1, draw a red rectangle at this UI slot
 	s32 _uiSelectedHighlight=-1;
 	while(1){
