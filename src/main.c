@@ -24,7 +24,7 @@ todo - don't forget to add audio gear volume setting
 
 #include "fonthelper.h"
 
-#define ISTESTINGMOBILE 0
+#define ISTESTINGMOBILE 1
 #define DISABLESOUND 1
 #define DOFANCYPAGE 1
 #define DOCENTERPLAY 0
@@ -130,6 +130,11 @@ noteSpot** songArray;
 u32 bpm=100;
 
 ////////////////////////////////////////////////
+
+void controlLoop(){
+	controlsStart();
+	controlsEnd();
+}
 
 u16 bitmpTextWidth(char* _passedString){
 	return strlen(_passedString)*(CONSTCHARW);
@@ -247,14 +252,17 @@ void uiCount(){
 
 	// Space between
 	u16 _noteVSpace=singleBlockSize+CONSTCHARW; // TODO - Change if I change font size. 
-	u16 _columnTotalNotes = ((pageHeight*singleBlockSize)/_noteVSpace);
+	u16 _columnTotalNotes = ((visiblePageHeight*singleBlockSize)/_noteVSpace);
 	u16 _totalColumns = ceil((totalNotes-1)/(double)_columnTotalNotes);
 	while (1){
 
 		controlsStart();
 		if (wasJustPressed(SCE_TOUCH)){
-			controlsEnd();
-			break;
+			if (floor((touchY-globalDrawYOffset)/singleBlockSize)==visiblePageHeight){
+				// Because we break info control loop. This will make it so SCE_TOUCH is no longer wasJustPressed, but it will still be isDown, so we have to make sure the user tapped not on the song, but on the buttons, which require wasJustPressed
+				controlLoop();
+				break;
+			}
 		}
 		controlsEnd();
 
@@ -271,6 +279,7 @@ void uiCount(){
 				++_nextNoteDrawId;
 			}
 		}
+		drawString("Click this text to go back.",0,logicalScreenHeight-CONSTCHARW);
 		endDrawing();
 	}
 }
