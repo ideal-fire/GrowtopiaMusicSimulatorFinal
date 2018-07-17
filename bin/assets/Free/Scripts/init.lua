@@ -202,12 +202,16 @@ addTripleNotes("assets/Proprietary/Sound/sax_%d.wav",9,"assets/Proprietary/Image
 -- Add the repeat notes, no sound effects for them
 addNote(12,loadImage("assets/Proprietary/Images/repeatStart.png"));
 addNote(13,loadImage("assets/Proprietary/Images/repeatEnd.png"));
+-- Special IDs
+setSpecialID("repeatStart",12);
+setSpecialID("repeatEnd",13);
 
 -- Add the spooky note. It doesn't have a flat or sharp friend, so we use a different function to load the sounds
 addSingleNote("assets/Proprietary/Sound/spooky_%d.wav",14,"assets/Proprietary/Images/spooky.png");
 
 -- Add the audio gear
 addNote(15,loadImage("assets/Proprietary/Images/audioGear.png"));
+setSpecialID("audioGear",15);
 
 -- Add fltue notes
 addTripleNotes("assets/Proprietary/Sound/flute_%d.wav",16,"assets/Free/Images/flute.png","assets/Free/Images/fluteSharp.png","assets/Free/Images/fluteFlat.png");

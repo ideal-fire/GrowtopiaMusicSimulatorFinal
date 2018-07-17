@@ -3,7 +3,6 @@ https://www.lua.org/manual/5.3/manual.html#lua_pushlightuserdata
 https://github.com/mlabbe/nativefiledialog
 
 todo - Add volume setting. Morons want it and don't know how to use volume mixer
-todo - note names are useless for anything but audio gears, note counter can display icons
 todo - don't forget to add audio gear volume setting
 */
 #include <stdio.h>
@@ -24,8 +23,8 @@ todo - don't forget to add audio gear volume setting
 
 #include "fonthelper.h"
 
-#define ISTESTINGMOBILE 1
-#define DISABLESOUND 1
+#define ISTESTINGMOBILE 0
+#define DISABLESOUND 0
 #define DOFANCYPAGE 1
 #define DOCENTERPLAY 0
 
@@ -103,6 +102,7 @@ u16 totalNotes=0;
 
 u8 currentlyPlaying=0;
 s32 currentPlayPosition;
+s32 nextPlayPosition;
 u64 lastPlayAdvance=0;
 
 // Only the width of a page can change and it depends on the scale set by the user
@@ -129,11 +129,124 @@ noteSpot** songArray;
 
 u32 bpm=100;
 
-////////////////////////////////////////////////
+u8 repeatStartID=255;
+u8 repeatEndID=255;
+u8 audioGearID=255;
 
+////////////////////////////////////////////////
 void controlLoop(){
 	controlsStart();
 	controlsEnd();
+}
+
+void int2str(char* _outBuffer, int _inNumber){
+	sprintf(_outBuffer,"%d",_inNumber);
+}
+
+#define MAXINTINPUT 7
+#define MAXINTPLAE 1000000
+long getNumberInput(char* _prompt, long _defaultNumber){
+	controlLoop();
+	long _userInput=_defaultNumber;
+	char _userInputAsString[MAXINTINPUT+1]={'\0'};
+	
+	int _backspaceButtonX = 0;
+	int _exitButtonX = CONSTCHARW*4;
+	int _doneButtonX = CONSTCHARW*9;
+	char* _backspaceString="Del ";
+	char* _exitString="Exit ";
+	char* _doneString="Done";
+	int _backspaceWidth=strlen(_backspaceString)*CONSTCHARW;
+	int _exitWidth=strlen(_exitString)*CONSTCHARW;
+	int _doneWidth=strlen(_doneString)*CONSTCHARW;
+	
+	char _shouldExit=0;
+
+	int2str(_userInputAsString,_userInput);
+	//itoa(num, buffer, 10);
+	while (!_shouldExit){
+		startDrawing(); // Start drawing here because we draw a red background if we try to input too much text
+		controlsStart();
+		if (wasJustPressed(SCE_TOUCH)){
+			int _fixedTouchX = touchX-globalDrawXOffset;
+			int _fixedTouchY = touchY-globalDrawYOffset;
+			if (_fixedTouchY>logicalScreenHeight-singleBlockSize*2){
+				if (_fixedTouchY<logicalScreenHeight-singleBlockSize){
+					if (_userInput>=MAXINTPLAE){
+						drawRectangle(0,0,logicalScreenWidth,logicalScreenHeight,255,0,0,255);
+					}else{
+						_userInput*=10;
+						_userInput+=_fixedTouchX/singleBlockSize;
+						int2str(_userInputAsString,_userInput);
+					}
+				}else{
+					if (_fixedTouchX>_backspaceButtonX && _fixedTouchX<_backspaceButtonX+_backspaceWidth){
+						if (_userInput==0){
+							drawRectangle(0,0,logicalScreenWidth,logicalScreenHeight,255,0,0,255);
+						}else{
+							_userInput/=10;
+							int2str(_userInputAsString,_userInput);
+						}
+					}else if (_fixedTouchX>_exitButtonX && _fixedTouchX<_exitButtonX+_exitWidth){
+						_shouldExit=1;	
+						_userInput=_defaultNumber;
+					}else if (_fixedTouchX>_doneButtonX && _fixedTouchX<_doneButtonX+_doneWidth){
+						_shouldExit=1;
+					}
+				}
+			}
+		}
+		controlsEnd();
+		
+		drawString(_prompt,0,0);
+		drawString(_userInputAsString,0,singleBlockSize);
+		char _currentDrawNumber=0;
+		char j;
+		for (j=0;j<=9;++j){
+			char _tempString[2];
+			_tempString[0]=_currentDrawNumber+48;
+			_tempString[1]='\0';
+			int _drawX = j*singleBlockSize;
+			int _drawY = logicalScreenHeight-2*singleBlockSize;
+			
+			if (j%2==0){
+				drawRectangle(_drawX,_drawY,singleBlockSize,singleBlockSize,204,255,204,255);
+			}else{
+				drawRectangle(_drawX,_drawY,singleBlockSize,singleBlockSize,255,204,255,255);
+			}
+			drawString(_tempString,_drawX+CONSTCHARW/2,_drawY+CONSTCHARW/2);
+			_currentDrawNumber++;
+		}
+		drawRectangle(_backspaceButtonX,logicalScreenHeight-singleBlockSize,_backspaceWidth,singleBlockSize,204,204,255,255);
+		drawRectangle(_exitButtonX,logicalScreenHeight-singleBlockSize,_exitWidth,singleBlockSize,255,204,204,255);
+		drawRectangle(_doneButtonX,logicalScreenHeight-singleBlockSize,_doneWidth,singleBlockSize,204,204,255,255);
+
+		drawString(_backspaceString,_backspaceButtonX,logicalScreenHeight-singleBlockSize+CONSTCHARW/2);
+		drawString(_exitString,_exitButtonX,logicalScreenHeight-singleBlockSize+CONSTCHARW/2);
+		drawString(_doneString,_doneButtonX,logicalScreenHeight-singleBlockSize+CONSTCHARW/2);
+
+		endDrawing();
+	}
+
+	controlLoop();
+	return _userInput;
+}
+
+// Inclusive bounds
+void resetRepeatNotes(int _startResetX, int _endResetX){
+	int i;
+	for (i=_startResetX;i<=_endResetX;++i){
+		int j;
+		for (j=0;j<songHeight;++j){
+			if (songArray[j][i].id==repeatEndID){
+				songArray[j][i].extraData=NULL;
+			}
+		}
+	}
+}
+
+void resetPlayState(){
+	resetRepeatNotes(0,songWidth-1);
 }
 
 u16 bitmpTextWidth(char* _passedString){
@@ -183,6 +296,46 @@ void updateNoteIcon(){
 	}
 }
 
+void pageTransition(int _destX){
+	#if DOFANCYPAGE
+		int _positiveDest=songWidth;
+		int _negativeDest=-1;
+		int _changeAmount = (_destX-songXOffset)/30;
+		if (_changeAmount==0){
+			if (_destX-songXOffset<0){
+				_changeAmount=-1;
+			}else{
+				_changeAmount=1;
+			}
+		}
+		if (_destX<songXOffset){
+			_negativeDest = _destX;
+		}else if (_destX>songXOffset){
+			_positiveDest = _destX;
+		}else{
+			//printf("Bad, are equal, nothing to do.\n");
+			return;
+		}
+		while(1){
+			songXOffset+=_changeAmount;
+			if (songXOffset>=_positiveDest){
+				songXOffset = _positiveDest;
+				break;
+			}
+			if (songXOffset<=_negativeDest){
+				songXOffset = _negativeDest;
+				break;
+			}
+			startDrawing();
+			drawSong();
+			drawUI();
+			endDrawing();
+		}
+	#else
+		songXOffset = _destX;
+	#endif
+}
+
 void togglePlayUI(){
 	uiElement* _playButtonUI = getUIByID(UNIQUE_PLAY);
 	if (_playButtonUI->image==stopButtonImage){
@@ -199,19 +352,28 @@ void togglePlayUI(){
 }
 
 void playAtPosition(s32 _startPosition){
+	resetPlayState();
 	if (!currentlyPlaying){
 		pageTransition(_startPosition);
 		songXOffset=_startPosition;
 		togglePlayUI();
 		currentlyPlaying=1;
-		currentPlayPosition = songXOffset;
-		lastPlayAdvance=getTicks();
-		centerAround(currentPlayPosition);
-		playColumn(currentPlayPosition);
+		//currentPlayPosition = songXOffset;
+		lastPlayAdvance=0;
+		nextPlayPosition=songXOffset;
 	}else{
 		togglePlayUI();
 		currentlyPlaying=0;
 		songXOffset = (currentPlayPosition/pageWidth)*pageWidth;
+	}
+}
+
+void uiBPM(){
+	do{
+		bpm=getNumberInput("Input beats per minute.",bpm);
+	}while(bpm==0);
+	if (bpm<20 || bpm>200){
+		// LazyMessage("Too wierd for real Growtopia")
 	}
 }
 
@@ -286,46 +448,6 @@ void uiCount(){
 
 void uiPlay(){
 	playAtPosition(0);
-}
-
-void pageTransition(int _destX){
-	#if DOFANCYPAGE
-		int _positiveDest=songWidth;
-		int _negativeDest=-1;
-		int _changeAmount = (_destX-songXOffset)/30;
-		if (_changeAmount==0){
-			if (_destX-songXOffset<0){
-				_changeAmount=-1;
-			}else{
-				_changeAmount=1;
-			}
-		}
-		if (_destX<songXOffset){
-			_negativeDest = _destX;
-		}else if (_destX>songXOffset){
-			_positiveDest = _destX;
-		}else{
-			//printf("Bad, are equal, nothing to do.\n");
-			return;
-		}
-		while(1){
-			songXOffset+=_changeAmount;
-			if (songXOffset>=_positiveDest){
-				songXOffset = _positiveDest;
-				break;
-			}
-			if (songXOffset<=_negativeDest){
-				songXOffset = _negativeDest;
-				break;
-			}
-			startDrawing();
-			drawSong();
-			drawUI();
-			endDrawing();
-		}
-	#else
-		songXOffset = _destX;
-	#endif
 }
 
 void uiUp(){
@@ -536,6 +658,19 @@ int L_addUI(lua_State* passedState){
 	lua_pushnumber(passedState,totalUI-1);
 	return 1;
 }
+int L_setSpecialID(lua_State* passedState){
+	const char* _passedIdentifier = lua_tostring(passedState,1);
+	if (strcmp(_passedIdentifier,"repeatStart")==0){
+		repeatStartID = lua_tonumber(passedState,2);
+	}else if (strcmp(_passedIdentifier,"repeatEnd")==0){
+		repeatEndID = lua_tonumber(passedState,2);
+	}else if (strcmp(_passedIdentifier,"audioGear")==0){
+		audioGearID = lua_tonumber(passedState,2);
+	}else{
+		printf("Invalid identifier %s\n",_passedIdentifier);
+	}
+	return 0;
+}
 
 void pushLuaFunctions(){
 	LUAREGISTER(L_addNote,"addNote");
@@ -547,6 +682,7 @@ void pushLuaFunctions(){
 	LUAREGISTER(L_swapUI,"swapUI");
 	LUAREGISTER(L_deleteUI,"deleteUI");
 	LUAREGISTER(L_addUI,"addUI");
+	LUAREGISTER(L_setSpecialID,"setSpecialID");
 }
 
 void die(const char* message){
@@ -570,9 +706,34 @@ void goodPlaySound(CROSSSFX* _passedSound){
 
 void playColumn(s32 _columnNumber){
 	int i;
+	char _repeatAlreadyFound=0;
+	char _foundRepeatY=0;
 	for (i=0;i<pageHeight;++i){
 		if (songArray[i][_columnNumber].id!=0){
-			goodPlaySound(noteSounds[songArray[i][_columnNumber].id][i]);
+			if (songArray[i][_columnNumber].id==repeatEndID && !_repeatAlreadyFound && songArray[i][_columnNumber].extraData!=(void*)1){
+				_repeatAlreadyFound=1;
+				_foundRepeatY=i;
+				songArray[i][_columnNumber].extraData=(void*)1;
+			}else{
+				goodPlaySound(noteSounds[songArray[i][_columnNumber].id][i]);
+			}
+		}
+	}
+	// Process the repeat note we found
+	if (_repeatAlreadyFound){
+		int _searchX;
+		for (_searchX=_columnNumber-1;_searchX>=0;--_searchX){
+			if (songArray[_foundRepeatY][_searchX].id==repeatStartID){
+				resetRepeatNotes(_searchX+1,_columnNumber-1);
+				nextPlayPosition = _searchX;
+				_repeatAlreadyFound=0;
+				break;
+			}
+		}
+		// If we didn't find a repeat start to go with our repeat end
+		if (_repeatAlreadyFound){
+			// Jump to song start
+			nextPlayPosition=0;
 		}
 	}
 }
@@ -712,8 +873,10 @@ void init(){
 	_newButton->activateFunc = uiYellowPlay;
 	_newButton->uniqueId = UNIQUE_YPLAY;
 
-
-
+	// This should be the second to last button, it's a little useful
+	_newButton = addUI();
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/bpmButton.png");
+	_newButton->activateFunc = uiBPM;
 	// This should be the last button, it's very useless
 	_newButton = addUI();
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/countButton.png");
@@ -782,10 +945,12 @@ int main(int argc, char *argv[]){
 
 		// Process playing
 		if (currentlyPlaying){
+			// If our body is ready for the next column of notes
 			if (getTicks()>=lastPlayAdvance+bpmFormula(bpm)){
-				lastPlayAdvance = getTicks();
-				currentPlayPosition++;
-				centerAround(currentPlayPosition);
+				lastPlayAdvance = getTicks(); // How long needs to pass before the next column
+				currentPlayPosition = nextPlayPosition;
+				nextPlayPosition = currentPlayPosition+1; // Advance one. TODO - Check if we've reached the end of the song and loop
+				centerAround(currentPlayPosition); // Move camera
 				playColumn(currentPlayPosition);
 			}
 		}
