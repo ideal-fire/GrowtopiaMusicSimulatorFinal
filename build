@@ -1,3 +1,3 @@
 cd src
-gcc main.c -Wall -Wno-char-subscripts -g -I ../../GeneralGood/Include -L../lib -lgeneralgoodlinux -llua -lSDL2main -lSDL2 -lSDL2_image -lSDL2_mixer -lSDL2_ttf -lm -o ./../bin/a.exe
+gcc main.c -Wall -Wno-char-subscripts -g -I ../../GeneralGood/Include -L../lib -lnfd `pkg-config --cflags --libs gtk+-3.0` -lgeneralgoodlinux -llua -lSDL2main -lSDL2 -lSDL2_image -lSDL2_mixer -lSDL2_ttf -lm -o ./../bin/a.exe
 cd ..
