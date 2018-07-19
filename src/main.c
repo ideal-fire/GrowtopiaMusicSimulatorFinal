@@ -31,7 +31,7 @@ todo - don't forget to add audio gear volume setting
 
 #include "fonthelper.h"
 
-#define ISTESTINGMOBILE 1
+#define ISTESTINGMOBILE 0
 #define DISABLESOUND 0
 
 #define u8 uint8_t
@@ -164,9 +164,61 @@ char positionString[12];
 
 ////////////////////////////////////////////////
 
+char isBigEndian(){
+	volatile u32 i=0x01234567;
+    return !((*((u8*)(&i))) == 0x67);
+}
+
+s16 fixShort(s16 _passedShort){
+	if (isBigEndian()){ // I've never tested this
+		printf("Big boy!\n");
+		// Swap them because C# stores in files as little endian
+		s16 _readASBigEndian;
+		((u8*)(&_readASBigEndian))[0] = ((u8*)(&_passedShort))[1];
+		((u8*)(&_readASBigEndian))[1] = ((u8*)(&_passedShort))[0];
+		return _readASBigEndian;
+	}else{
+		return _passedShort;
+	}
+}
+
 void setSongXOffset(int _newValue){
 	songXOffset = _newValue;
 	sprintf(positionString,"%d/%d",songXOffset+!optionZeroBasedPosition,songWidth);
+}
+
+void clearSong(){
+	setSongXOffset(0);
+	setSongWidth(songArray,songWidth,400);
+	songWidth=400;
+	int i;
+	for (i=0;i<songHeight;++i){
+		int j;
+		for (j=0;j<songWidth;++j){
+			songArray[i][j].id=0;
+			songArray[i][j].extraData=NULL;
+		}
+	}
+}
+
+// TODO - For mobile I can make this function use the number input system
+// This function returns malloc'd string or NULL
+char* selectLoadFile(){
+	#ifdef NO_FANCY_DIALOG
+		printf("Not yet supported, number entering ez system.\n");
+		return NULL;
+	#else
+		nfdchar_t *outPath = NULL;
+		nfdresult_t result = NFD_OpenDialog( "GMSF,AngryLegGuy,mylegguy", NULL, &outPath );
+		if (result == NFD_OKAY){
+			return outPath;
+		}else if ( result == NFD_CANCEL ){
+			return NULL;
+		}else{
+			printf("Error: %s\n", NFD_GetError() );
+			return NULL;
+		}
+	#endif
 }
 void findMaxX(){
 	maxX=0;
@@ -358,6 +410,7 @@ void resetRepeatNotes(int _startResetX, int _endResetX){
 	}
 }
 
+// Does not change song data, just temporary note states and stuff
 void resetPlayState(){
 	resetRepeatNotes(0,songWidth-1);
 }
@@ -477,6 +530,20 @@ void playAtPosition(s32 _startPosition){
 		currentlyPlaying=0;
 		setSongXOffset((currentPlayPosition/pageWidth)*pageWidth);
 	}
+}
+
+#include "songLoaders.h"
+
+void uiSave(){
+
+}
+
+void uiLoad(){
+	char* _chosenFile = selectLoadFile();
+	if (_chosenFile!=NULL){
+		loadSong(_chosenFile);
+	}
+	free(_chosenFile);
 }
 
 void uiUIScroll(){
@@ -715,6 +782,9 @@ void* recalloc(void* _oldBuffer, int _oldSize, int _newSize){
 // Can't change song height
 // I thought about it. This function is so small, it wouldn't be worth it to just make a helper function for all arrays I want to resize.
 void setSongWidth(noteSpot** _passedArray, u16 _passedOldWidth, u16 _passedWidth){
+	if (_passedOldWidth==_passedWidth){
+		return;
+	}
 	int i;
 	for (i=0;i<songHeight;++i){
 		_passedArray[i] = recalloc(_passedArray[i],_passedOldWidth*sizeof(noteSpot),_passedWidth*sizeof(noteSpot));
@@ -999,30 +1069,10 @@ void doUsualDrawing(){
 	drawString(positionString,uiPageSize*singleBlockSize+CONSTCHARW/2,visiblePageHeight*singleBlockSize+CONSTCHARW/2);
 }
 
-// TODO - For mobile I can make this function use the number input system
-// This function returns malloc'd string or NULL
-char* selectLoadFile(){
-	#ifdef NO_FANCY_DIALOG
-		printf("Not yet supported, number entering ez system.\n");
-		return NULL;
-	#else
-		nfdchar_t *outPath = NULL;
-		nfdresult_t result = NFD_OpenDialog( "png,jpg;pdf", NULL, &outPath );
-		if (result == NFD_OKAY){
-			return outPath;
-		}else if ( result == NFD_CANCEL ){
-			return NULL;
-		}else{
-			printf("Error: %s\n", NFD_GetError() );
-			return NULL;
-		}
-	#endif
-}
-
 void init(){
 	initGraphics(832,480,&screenWidth,&screenHeight);
 	initAudio();
-	Mix_AllocateChannels(14*2); // We need a lot of channels for all these music notes
+	Mix_AllocateChannels(14*4); // We need a lot of channels for all these music notes
 	setClearColor(192,192,192,255);
 	if (screenWidth!=832 || screenHeight!=480){
 		isMobile=1;
@@ -1089,7 +1139,7 @@ void init(){
 	// Add save Button
 	_newButton = addUI();
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/saveButton.png");
-	_newButton->activateFunc = NULL;
+	_newButton->activateFunc = uiSave;
 
 	// Add page buttons
 	_newButton = addUI();
@@ -1137,7 +1187,7 @@ void init(){
 	//
 	_newButton = addUI();
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/loadButton.png");
-	_newButton->activateFunc = NULL;
+	_newButton->activateFunc = uiLoad;
 
 	// Very last, run the init script
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);

@@ -145,8 +145,7 @@ end
 --/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 -- Step 1 - Set up song board UI
---if (isMobile()) then
-if (true) then
+if (isMobile()) then
 	myBGPartTableEmpty = {};
 	myBGPartyTableLabel = {};
 
@@ -215,10 +214,10 @@ addNote(15,loadImage("assets/Proprietary/Images/audioGear.png"));
 setSpecialID("audioGear",15);
 
 -- Add fltue notes
-addTripleNotes("assets/Proprietary/Sound/flute_%d.wav",16,"assets/Free/Images/flute.png","assets/Free/Images/fluteSharp.png","assets/Free/Images/fluteFlat.png");
+addTripleNotes("assets/Proprietary/Sound/flute_%d.wav",16,"assets/Proprietary/Images/flute.png","assets/Proprietary/Images/fluteSharp.png","assets/Proprietary/Images/fluteFlat.png");
 
 -- Add festive note, like spooky is it special
-addSingleNote("assets/Proprietary/Sound/festive_%d.wav",19,"assets/Free/Images/festive.png");
+addSingleNote("assets/Proprietary/Sound/festive_%d.wav",19,"assets/Proprietary/Images/festive.png");
 
 -- Add guitar notes
-addTripleNotes("assets/Proprietary/Sound/spanish_guitar_%d.wav",20,"assets/Free/Images/guitar.png","assets/Free/Images/guitarSharp.png","assets/Free/Images/guitarFlat.png");
+addTripleNotes("assets/Proprietary/Sound/spanish_guitar_%d.wav",20,"assets/Proprietary/Images/guitar.png","assets/Proprietary/Images/guitarSharp.png","assets/Proprietary/Images/guitarFlat.png");
