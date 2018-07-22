@@ -13,8 +13,9 @@ void loadGMSClassicSong(FILE* fp){
 	fseek(fp,3,SEEK_CUR); // idk, this is just what Growtopia Music Simulator Reborn does
 	for (int y = 0; y < 14; y++) {
 		for (int x = 0; x < 400; x++) {
-			fread(&(songArray[y][x].id),1,1,fp);
-			songArray[y][x].id-=48; // Convert from ASCII
+			u8 _readId = fgetc(fp);
+			_readId-=48; // Convert from ASCII
+			_placeNoteLow(x,y,_readId-48,0);
 		}
 	}
 }
@@ -29,9 +30,122 @@ void loadGMSASong(FILE* fp){
 // File format of Growtopia Music Simulator Reborn
 // Will usually have the .AngryLegGuy extension
 #define FILE_FORMAT_GMSR 3
+//https://pastebin.com/raw/wPDeq5JM
 void loadGMSrSong(FILE* fp){
-	// I know I'm really, really not supposed to do this, but I don't want to ever have to look at this code again.
-	#include "realWorstFormat.h"
+	// Don't look at this code, please, I beg you. I wrote it once, it's terrible, but I don't want to write it again.
+	const u8 rebornAudioGearId=15;
+	
+	char mapversion;
+	fread(&mapversion,1,1,fp);
+	
+	if (mapversion >= 4) { // Seek past magic
+		fseek(fp,4,SEEK_CUR);
+	}else if (mapversion == 3) { // Seek past dummy bytes
+		fseek(fp,3,SEEK_CUR);
+	}
+	
+	s16 _readBPM;
+	fread(&_readBPM,2,1,fp);
+	_readBPM = fixShort(_readBPM);
+	bpm = _readBPM;
+	
+	s16 _readMapWidth=400;
+	s16 _readMapHeight=14;
+	if (mapversion <= 4) {
+		fseek(fp,2,SEEK_CUR); // Seek past useless dummy u8 values for map width and height
+	} else {
+		// Version 5 is when map resizing was introduced, actually load the map width.
+		fread(&_readMapWidth,2,1,fp);
+		_readMapWidth = fixShort(_readMapWidth);
+	}
+	fseek(fp,1,SEEK_CUR); // Seek past useles byte for number of layers
+	
+	u8 past = 255;
+	u8 present = 254;
+	u8 rollValue = 55;
+	u8 rolling = 0;
+	u8 rollAmount = 0;
+	
+	setSongWidth(songArray,songWidth,_readMapWidth);
+	songWidth=_readMapWidth;
+	printf("read width is %d\n",_readMapWidth);
+	//Debug.Print(mapversion.ToString()+";"+mapWidth.ToString()+";"+mapHeight.ToString()+".");
+	int x, y;
+	for (y = 0; y < _readMapHeight; y++) {
+		for (x = 0; x < _readMapWidth; x++) {
+			if (!rolling) {
+				if (past == present) {
+					// Checked here for good reasons.
+					rolling = 1;
+					rollValue = present;
+					fread(&rollAmount,1,1,fp);
+					//Debug.Print("Starting roll with value: "+rollValue.ToString()+" and amount: "+rollAmount.ToString()+".");
+					if (rollAmount <= 0) {
+						//Debug.Print ("Ending roll...");
+						past = 255;
+						present = 244;
+						rolling = 0;
+						u8 _readByte = fgetc(fp);
+						_placeNoteLow(x,y,_readByte,0);
+						if (songArray[y][x].id==rebornAudioGearId){
+							printf("TODO\n");
+								fseek(fp,10,SEEK_CUR); // TEMP
+							//LoadAudioGearInFile(ref file, ref workMap, x, y, tmf);
+							past=255;
+							present=254;
+							continue;
+						}
+						past = present;
+						present = songArray[y][x].id;
+						//Debug.Print ("Wrote: " + workMap [trueX, trueY].ToString () + " and present and past is: " + present.ToString () + " ; " + past.ToString () + ".");
+						continue;
+					}
+					_placeNoteLow(x,y,rollValue,0);
+					rollAmount--;
+					continue;
+				}else{
+					u8 _readByte = fgetc(fp);
+					_placeNoteLow(x,y,_readByte,0);
+					if (songArray[y][x].id==rebornAudioGearId){
+						printf("TODO\n");
+								fseek(fp,10,SEEK_CUR); // TEMP
+						//LoadAudioGearInFile(ref file, ref workMap, x, y, tmf);
+						past=255;
+						present=254;
+						continue;
+					}
+					past = present;
+					present = songArray[y][x].id;
+				}
+				//Debug.Print ("Wrote: " + workMap [trueX, trueY].ToString () + " and present and past is: " + present.ToString () + " ; " + past.ToString () + ".");
+			} else {
+				if (rollAmount <= 0) {
+					//Debug.Print ("Ending roll...");
+					past = 255;
+					present = 244;
+					rolling = 0;
+					u8 _readByte = fgetc(fp);
+					_placeNoteLow(x,y,_readByte,0);
+					if (songArray[y][x].id==rebornAudioGearId){
+						printf("TODO\n");
+								fseek(fp,10,SEEK_CUR); // TEMP
+						//LoadAudioGearInFile(ref file, ref workMap, x, y, tmf);
+						past=255;
+						present=254;
+						continue;
+					}
+					past = present;
+					present = songArray[y][x].id;
+					//Debug.Print ("Wrote: " + workMap [trueX, trueY].ToString () + " and present and past is: " + present.ToString () + " ; " + past.ToString () + ".");
+					continue;
+				}else{
+					_placeNoteLow(x,y,rollValue,0);
+					rollAmount--;
+				}
+	
+			}
+		}
+	}
 }
 
 // File format of Growtopia Music Simulator Online
@@ -53,8 +167,9 @@ void loadGMSOSong(FILE* fp){
 	for (i=0;i<400;++i){
 		int j;
 		for (j=0;j<14;++j){
-			u8 _lastReadId = fgetc(fp);
-			songArray[j][i].id = _lastReadId-48; // Convert from ASCII
+			u8 _readId = fgetc(fp);
+			_readId-=48; // Convert from ASCII
+			_placeNoteLow(i,j,_readId-48,0);
 		}
 	}
 }
@@ -178,6 +293,7 @@ void loadSong(char* _passedFilename){
 			}
 			// New maxX because new song data
 			findMaxX();
+			setSongXOffset(0); // Reloads display for song width too.
 		}
 		fclose(fp);
 	}

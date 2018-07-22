@@ -63,25 +63,10 @@ todo - don't forget to add audio gear volume setting
 
 #define CLICKTOGOBACK "Click this text to go back."
 
+#define AUDIOGEARSPACE 5
+
 ////////////////////////////////////////////////
-typedef void(*voidFunc)();
-typedef struct{
-	CrossTexture* image;
-	voidFunc activateFunc;
-	s16 uniqueId;
-}uiElement;
-typedef struct{
-	u8 id;
-	void* extraData; // For audio gears, this could be their data. For repeat notes, it could be temp data about if they've been used or not.
-}noteSpot;
-void drawSong();
-void drawUI();
-void playColumn(s32 _columnNumber);
-void pageTransition(int _destX);
-void drawImageScaleAlt(CrossTexture* _passedTexture, int _x, int _y, double _passedXScale, double _passedYScale);
-void drawString(char* _passedString, int _x, int _y);
-void setSongWidth(noteSpot** _passedArray, u16 _passedOldWidth, u16 _passedWidth);
-void doUsualDrawing();
+#include "main.h"
 ////////////////////////////////////////////////
 u8 optionPlayOnPlace=1;
 u8 optionZeroBasedPosition=0;
@@ -1015,15 +1000,28 @@ void playColumn(s32 _columnNumber){
 		}
 	}
 }
-
-void placeNote(int _x, int _y, u16 _noteId){
-	if (_x>maxX){
-		maxX=_x;
+void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound){
+	if (songArray[_y][_x].id==audioGearID){
+		free(songArray[_y][_x].extraData);
 	}
-	if (songArray[_y][_x].id!=_noteId && noteSounds[_noteId][_y]!=NULL && optionPlayOnPlace){
+	if (_noteId==audioGearID){
+		songArray[_y][_x].extraData = malloc(AUDIOGEARSPACE*sizeof(u8)*2);
+	}else{
+		songArray[_y][_x].extraData=NULL;
+	}
+	if (_shouldPlaySound){
 		goodPlaySound(noteSounds[_noteId][_y]);
 	}
 	songArray[_y][_x].id=_noteId;
+}
+void placeNote(int _x, int _y, u16 _noteId){
+	if (songArray[_y][_x].id==_noteId){
+		return;
+	}
+	if (_x>maxX){
+		maxX=_x;
+	}
+	_placeNoteLow(_x,_y,_noteId,noteSounds[_noteId][_y]!=NULL && optionPlayOnPlace);
 }
 
 void drawPlayBar(int _x){
