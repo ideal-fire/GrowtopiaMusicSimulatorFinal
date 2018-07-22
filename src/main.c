@@ -2,6 +2,8 @@
 https://www.lua.org/manual/5.3/manual.html#lua_pushlightuserdata
 https://github.com/mlabbe/nativefiledialog
 
+https://forums.libsdl.org/viewtopic.php?p=15228
+
 This is code is free software.
 	Not "free" as in "Lol, here's a 20 page license file even I've never read. if you modify my code, your code now belongs to the 20 page license file too. dont even think about using this code in a way that doesnt align with my ideology. its freedom, I promise"
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code."
@@ -190,8 +192,12 @@ void clearSong(){
 // This function returns malloc'd string or NULL
 char* selectLoadFile(){
 	#ifdef NO_FANCY_DIALOG
-		printf("Not yet supported, number entering ez system.\n");
-		return NULL;
+		printf("Input path:\n");
+		char* _readLine=NULL;
+		size_t _readLineBufferSize = 0;
+		getline(&_readLine,&_readLineBufferSize,stdin);
+		removeNewline(_readLine);
+		return _readLine;
 	#else
 		nfdchar_t *outPath = NULL;
 		nfdresult_t result = NFD_OpenDialog( "GMSF,AngryLegGuy,mylegguy", NULL, &outPath );
@@ -766,6 +772,7 @@ void* recalloc(void* _oldBuffer, int _oldSize, int _newSize){
 
 // Can't change song height
 // I thought about it. This function is so small, it wouldn't be worth it to just make a helper function for all arrays I want to resize.
+// TODO - Memory leak can happen if user puts audio gears at the end of the song and then shrinks the song
 void setSongWidth(noteSpot** _passedArray, u16 _passedOldWidth, u16 _passedWidth){
 	if (_passedOldWidth==_passedWidth){
 		return;
@@ -977,6 +984,13 @@ void playColumn(s32 _columnNumber){
 				_repeatAlreadyFound=1;
 				_foundRepeatY=i;
 				songArray[i][_columnNumber].extraData=(void*)1;
+			}else if (songArray[i][_columnNumber].id==audioGearID){
+				u8 j;
+				for (j=0;j<AUDIOGEARSPACE;++j){
+					if (songArray[i][_columnNumber].extraData[j*2]!=0){
+						goodPlaySound(noteSounds[songArray[i][_columnNumber].extraData[j*2]][songArray[i][_columnNumber].extraData[j*2+1]]);
+					}
+				}
 			}else{
 				goodPlaySound(noteSounds[songArray[i][_columnNumber].id][i]);
 			}
@@ -1005,7 +1019,7 @@ void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound){
 		free(songArray[_y][_x].extraData);
 	}
 	if (_noteId==audioGearID){
-		songArray[_y][_x].extraData = malloc(AUDIOGEARSPACE*sizeof(u8)*2);
+		songArray[_y][_x].extraData = calloc(1,AUDIOGEARSPACE*sizeof(u8)*2);
 	}else{
 		songArray[_y][_x].extraData=NULL;
 	}
@@ -1015,56 +1029,103 @@ void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound){
 	songArray[_y][_x].id=_noteId;
 }
 void placeNote(int _x, int _y, u16 _noteId){
-	if (songArray[_y][_x].id==_noteId){
+	
+	if (_noteId==audioGearID && songArray[_y][_x].id==audioGearID){
+		audioGearGUI(songArray[_y][_x].extraData);
+	}/*else if (songArray[_y][_x].id==_noteId){
 		return;
+	}*/else{
+		if (_x>maxX){
+			maxX=_x;
+		}
+		_placeNoteLow(_x,_y,_noteId,noteSounds[_noteId][_y]!=NULL && optionPlayOnPlace);
 	}
-	if (_x>maxX){
-		maxX=_x;
-	}
-	_placeNoteLow(_x,_y,_noteId,noteSounds[_noteId][_y]!=NULL && optionPlayOnPlace);
 }
 
 void drawPlayBar(int _x){
 	drawRectangle((_x-songXOffset)*singleBlockSize,0,singleBlockSize,visiblePageHeight*singleBlockSize,128,128,128,100);
 }
 
-void drawSong(){
+void drawSong(noteSpot** _songToDraw, int _drawWidth, int _drawHeight, int _xOffset, int _yOffset){
 	int i;
 	if (backgroundMode==BGMODE_SINGLE){
-		drawImageScaleAlt(bigBackground,0,0,generalScale,generalScale);
+		if (_drawWidth!=25){
+			drawImageScaleAlt(bigBackground,(-1*getTextureWidth(bigBackground))+singleBlockSize+singleBlockSize*_drawWidth,0,generalScale,generalScale);
+		}else{
+			drawImageScaleAlt(bigBackground,0,0,generalScale,generalScale);
+		}
 	}
-	for (i=0;i<visiblePageHeight;++i){
+	for (i=0;i<_drawHeight;++i){
 		int j;
-		for (j=0;j<pageWidth;++j){
-			if (songArray[i+songYOffset][j+songXOffset].id==0){
+		for (j=0;j<_drawWidth;++j){
+			if (_songToDraw[i+_yOffset][j+_xOffset].id==0){
 				// If we're doing the special part display mode
 				if (backgroundMode==BGMODE_PART){
-					drawImageScaleAlt(bgPartsEmpty[i+songYOffset],j*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
+					drawImageScaleAlt(bgPartsEmpty[i+_yOffset],j*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
 				}
 			}else{
-				drawImageScaleAlt(noteImages[songArray[i+songYOffset][j+songXOffset].id],j*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
+				drawImageScaleAlt(noteImages[_songToDraw[i+_yOffset][j+_xOffset].id],j*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
 			}
 		}
 		if (backgroundMode==BGMODE_PART){
-			drawImageScaleAlt(bgPartsLabel[i+songYOffset],pageWidth*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
+			drawImageScaleAlt(bgPartsLabel[i+_yOffset],_drawWidth*singleBlockSize,i*singleBlockSize,generalScale,generalScale);
 		}
 	}
 }
 
-void drawUI(){
+void noteUIControls(){
+	if (wasJustPressed(SCE_MOUSE_SCROLL)){
+		if (mouseScroll<0){
+			selectedNote--;
+			if (selectedNote<0){
+				selectedNote=totalNotes-1;
+			}
+			updateNoteIcon();
+		}else if (mouseScroll>0){
+			selectedNote++;
+			if (selectedNote==totalNotes){
+				selectedNote=0;
+			}
+			updateNoteIcon();
+		}// 0 scroll is ignored
+	}
+}
+
+void drawUI(uiElement* _passedUIBar){
 	int i;
 	for (i=uiScrollOffset;i<uiPageSize+uiScrollOffset;++i){
-		drawImageScaleAlt(myUIBar[i].image,(i-uiScrollOffset)*singleBlockSize,visiblePageHeight*singleBlockSize,generalScale,generalScale);
+		drawImageScaleAlt(_passedUIBar[i].image,(i-uiScrollOffset)*singleBlockSize,visiblePageHeight*singleBlockSize,generalScale,generalScale);
 	}
 }
 
 void doUsualDrawing(){
-	drawSong();
+	drawSong(songArray,pageWidth,visiblePageHeight,songXOffset,songYOffset);
 	if (currentlyPlaying){
 		drawPlayBar(currentPlayPosition);
 	}
-	drawUI();
+	drawUI(myUIBar);
 	drawString(positionString,uiPageSize*singleBlockSize+CONSTCHARW/2,visiblePageHeight*singleBlockSize+CONSTCHARW/2);
+}
+
+void audioGearGUI(u8* _gearData){
+	noteSpot** _fakedMapArray=malloc(sizeof(noteSpot*)*songHeight);
+	int i;
+	for (i=0;i<songHeight;++i){
+		_fakedMapArray[i] = calloc(1,sizeof(noteSpot)*AUDIOGEARSPACE);
+	}
+	for (i=0;i<AUDIOGEARSPACE;++i){
+		if (_gearData[i*2]!=0){
+			_fakedMapArray[_gearData[i*2+1]][i].id=_gearData[i*2];
+		}
+	}
+	while(1){
+		controlsStart();
+		noteUIControls();
+		controlsEnd();
+		startDrawing();
+		drawSong(_fakedMapArray,AUDIOGEARSPACE,visiblePageHeight,0,0);
+		endDrawing();
+	}
 }
 
 void init(){
@@ -1212,7 +1273,6 @@ void init(){
 	// Hopefully we've added some note images in the init.lua.
 	updateNoteIcon();
 }
-
 int main(int argc, char *argv[]){
 	printf("Loading...\n");
 	selectedNote=1;
@@ -1220,11 +1280,18 @@ int main(int argc, char *argv[]){
 	initEmbeddedFont();
 	printf("Done loading.\n");
 
+	s16 _lastPlaceX=-1;
+	s16 _lastPlaceY=-1;
+
 	// If not -1, draw a red rectangle at this UI slot
 	s32 _uiSelectedHighlight=-1;
 	while(1){
 		controlsStart();
 		if (isDown(SCE_TOUCH)){
+			if (wasJustPressed(SCE_TOUCH)){ // If we're not dragging the mouse, you're allowed to place anywhere.
+				_lastPlaceY=-1;
+				_lastPlaceX=-1;
+			}
 			// We need to use floor so that negatives are not made positive
 			int _placeX = floor((touchX-globalDrawXOffset)/singleBlockSize);
 			int _placeY = floor((touchY-globalDrawYOffset)/singleBlockSize);
@@ -1244,25 +1311,15 @@ int main(int argc, char *argv[]){
 				}
 			}else{ // If we click the main section
 				if (!(_placeX>=pageWidth || _placeX<0)){ // In bounds in the main section, I mean.
-					placeNote(_placeX+songXOffset,_placeY+songYOffset,selectedNote);
+					if (!(_placeX==_lastPlaceX && _placeY==_lastPlaceY)){ // Don't place where we've just placed. Otherwise we'd be placing the same note on top of itself 60 times per second
+						_lastPlaceX = _placeX;
+						_lastPlaceY = _placeY;
+						placeNote(_placeX+songXOffset,_placeY+songYOffset,selectedNote);
+					}
 				}
 			}
 		}
-		if (wasJustPressed(SCE_MOUSE_SCROLL)){
-			if (mouseScroll<0){
-				selectedNote--;
-				if (selectedNote<0){
-					selectedNote=totalNotes-1;
-				}
-				updateNoteIcon();
-			}else if (mouseScroll>0){
-				selectedNote++;
-				if (selectedNote==totalNotes){
-					selectedNote=0;
-				}
-				updateNoteIcon();
-			}// 0 scroll is ignored
-		}
+		noteUIControls();
 		controlsEnd();
 
 		// Process playing
@@ -1271,7 +1328,7 @@ int main(int argc, char *argv[]){
 			if (getTicks()>=lastPlayAdvance+bpmFormula(bpm)){
 				lastPlayAdvance = getTicks(); // How long needs to pass before the next column
 				currentPlayPosition = nextPlayPosition;
-				nextPlayPosition = currentPlayPosition+1; // Advance one. TODO - Check if we've reached the end of the song and loop
+				nextPlayPosition = currentPlayPosition+1; // Advance one.
 				centerAround(currentPlayPosition); // Move camera
 				playColumn(currentPlayPosition);
 			}

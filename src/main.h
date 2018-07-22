@@ -6,12 +6,14 @@ typedef struct{
 }uiElement;
 typedef struct{
 	u8 id;
-	void* extraData; // For audio gears, this could be their data. For repeat notes, it could be temp data about if they've been used or not.
+	u8* extraData; // For audio gears, this could be their data. For repeat notes, it could be temp data about if they've been used or not.
 }noteSpot;
+
 void _addNumberInput(long* _outNumber, char* _outBuffer, int _addNumber);
 void _delNumberInput(long* _outNumber, char* _outBuffer);
 void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound);
 uiElement* addUI();
+void audioGearGUI(u8* _gearData);
 u16 bitmpTextWidth(char* _passedString);
 u32 bpmFormula(u32 re);
 void centerAround(u32 _passedPosition);
@@ -21,9 +23,9 @@ void die(const char* message);
 void doUsualDrawing();
 void drawImageScaleAlt(CrossTexture* _passedTexture, int _x, int _y, double _passedXScale, double _passedYScale);
 void drawPlayBar(int _x);
-void drawSong();
+void drawSong(noteSpot** _songToDraw, int _drawWidth, int _drawHeight, int _xOffset, int _yOffset);
 void drawString(char* _passedString, int _x, int _y);
-void drawUI();
+void drawUI(uiElement* _passedUIBar);
 void findMaxX();
 s16 fixShort(s16 _passedShort);
 int fixX(int _x);
@@ -47,6 +49,7 @@ int L_setSpecialID(lua_State* passedState);
 int L_swapUI(lua_State* passedState);
 CrossTexture* loadEmbeddedPNG(const char* _passedFilename);
 int main(int argc, char *argv[]);
+void noteUIControls();
 void pageTransition(int _destX);
 void placeNote(int _x, int _y, u16 _noteId);
 void playAtPosition(s32 _startPosition);

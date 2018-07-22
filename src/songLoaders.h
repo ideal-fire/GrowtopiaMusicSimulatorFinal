@@ -88,9 +88,7 @@ void loadGMSrSong(FILE* fp){
 						u8 _readByte = fgetc(fp);
 						_placeNoteLow(x,y,_readByte,0);
 						if (songArray[y][x].id==rebornAudioGearId){
-							printf("TODO\n");
-								fseek(fp,10,SEEK_CUR); // TEMP
-							//LoadAudioGearInFile(ref file, ref workMap, x, y, tmf);
+							fread(songArray[y][x].extraData,2,5,fp); // Read 10 bytes directly into extraData
 							past=255;
 							present=254;
 							continue;
@@ -107,9 +105,7 @@ void loadGMSrSong(FILE* fp){
 					u8 _readByte = fgetc(fp);
 					_placeNoteLow(x,y,_readByte,0);
 					if (songArray[y][x].id==rebornAudioGearId){
-						printf("TODO\n");
-								fseek(fp,10,SEEK_CUR); // TEMP
-						//LoadAudioGearInFile(ref file, ref workMap, x, y, tmf);
+						fread(songArray[y][x].extraData,2,5,fp); // Read 10 bytes directly into extraData
 						past=255;
 						present=254;
 						continue;
@@ -127,9 +123,7 @@ void loadGMSrSong(FILE* fp){
 					u8 _readByte = fgetc(fp);
 					_placeNoteLow(x,y,_readByte,0);
 					if (songArray[y][x].id==rebornAudioGearId){
-						printf("TODO\n");
-								fseek(fp,10,SEEK_CUR); // TEMP
-						//LoadAudioGearInFile(ref file, ref workMap, x, y, tmf);
+						fread(songArray[y][x].extraData,2,5,fp); // Read 10 bytes directly into extraData
 						past=255;
 						present=254;
 						continue;
