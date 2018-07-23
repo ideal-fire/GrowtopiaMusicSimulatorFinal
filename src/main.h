@@ -8,10 +8,14 @@ typedef struct{
 	u8 id;
 	u8* extraData; // For audio gears, this could be their data. For repeat notes, it could be temp data about if they've been used or not.
 }noteSpot;
+typedef struct{
+	char letter;
+	char accidental;
+}noteInfo;
 
 void _addNumberInput(long* _outNumber, char* _outBuffer, int _addNumber);
 void _delNumberInput(long* _outNumber, char* _outBuffer);
-void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound);
+void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound, noteSpot** _passedSong);
 uiElement* addUI();
 void audioGearGUI(u8* _gearData);
 u16 bitmpTextWidth(char* _passedString);

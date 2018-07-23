@@ -15,7 +15,7 @@ void loadGMSClassicSong(FILE* fp){
 		for (int x = 0; x < 400; x++) {
 			u8 _readId = fgetc(fp);
 			_readId-=48; // Convert from ASCII
-			_placeNoteLow(x,y,_readId-48,0);
+			_placeNoteLow(x,y,_readId-48,0,songArray);
 		}
 	}
 }
@@ -86,7 +86,7 @@ void loadGMSrSong(FILE* fp){
 						present = 244;
 						rolling = 0;
 						u8 _readByte = fgetc(fp);
-						_placeNoteLow(x,y,_readByte,0);
+						_placeNoteLow(x,y,_readByte,0,songArray);
 						if (songArray[y][x].id==rebornAudioGearId){
 							fread(songArray[y][x].extraData,2,5,fp); // Read 10 bytes directly into extraData
 							past=255;
@@ -98,12 +98,12 @@ void loadGMSrSong(FILE* fp){
 						//Debug.Print ("Wrote: " + workMap [trueX, trueY].ToString () + " and present and past is: " + present.ToString () + " ; " + past.ToString () + ".");
 						continue;
 					}
-					_placeNoteLow(x,y,rollValue,0);
+					_placeNoteLow(x,y,rollValue,0,songArray);
 					rollAmount--;
 					continue;
 				}else{
 					u8 _readByte = fgetc(fp);
-					_placeNoteLow(x,y,_readByte,0);
+					_placeNoteLow(x,y,_readByte,0,songArray);
 					if (songArray[y][x].id==rebornAudioGearId){
 						fread(songArray[y][x].extraData,2,5,fp); // Read 10 bytes directly into extraData
 						past=255;
@@ -121,7 +121,7 @@ void loadGMSrSong(FILE* fp){
 					present = 244;
 					rolling = 0;
 					u8 _readByte = fgetc(fp);
-					_placeNoteLow(x,y,_readByte,0);
+					_placeNoteLow(x,y,_readByte,0,songArray);
 					if (songArray[y][x].id==rebornAudioGearId){
 						fread(songArray[y][x].extraData,2,5,fp); // Read 10 bytes directly into extraData
 						past=255;
@@ -133,7 +133,7 @@ void loadGMSrSong(FILE* fp){
 					//Debug.Print ("Wrote: " + workMap [trueX, trueY].ToString () + " and present and past is: " + present.ToString () + " ; " + past.ToString () + ".");
 					continue;
 				}else{
-					_placeNoteLow(x,y,rollValue,0);
+					_placeNoteLow(x,y,rollValue,0,songArray);
 					rollAmount--;
 				}
 	
@@ -163,7 +163,7 @@ void loadGMSOSong(FILE* fp){
 		for (j=0;j<14;++j){
 			u8 _readId = fgetc(fp);
 			_readId-=48; // Convert from ASCII
-			_placeNoteLow(i,j,_readId-48,0);
+			_placeNoteLow(i,j,_readId-48,0,songArray);
 		}
 	}
 }

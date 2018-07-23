@@ -6,10 +6,11 @@ https://forums.libsdl.org/viewtopic.php?p=15228
 
 This is code is free software.
 	Not "free" as in "Lol, here's a 20 page license file even I've never read. if you modify my code, your code now belongs to the 20 page license file too. dont even think about using this code in a way that doesnt align with my ideology. its freedom, I promise"
-	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code."
+	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code." For actual license, see LICENSE file.
 
-todo - Add volume setting. Morons want it and don't know how to use volume mixer
+todo - Add master volume setting. Morons want it and don't know how to use volume mixer
 todo - don't forget to add audio gear volume setting
+todo - Allow scripts to assign the letter that a note uses in the audio gear. Notes that are not assigned a letter cannot be used in audio gears.
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,6 +53,8 @@ todo - don't forget to add audio gear volume setting
 #define UNIQUE_SELICON 1 // Stands for "select icon"
 #define UNIQUE_PLAY 2
 #define UNIQUE_YPLAY 3
+#define UNIQUE_UPBUTTON 4
+#define UNIQUE_DOWNBUTTON 5
 
 #define LUAREGISTER(x,y) lua_pushcfunction(L,x);\
 	lua_setglobal(L,y);
@@ -131,6 +134,7 @@ CrossTexture** bgPartsLabel=NULL;
 
 CrossTexture** noteImages=NULL;
 CROSSSFX*** noteSounds=NULL;
+noteInfo* extraNoteInfo=NULL;
 
 noteSpot** songArray;
 
@@ -147,9 +151,21 @@ int uiPageSize;
 // Position in the song as a string
 char positionString[12];
 
+uiElement backButtonUI;
+uiElement infoButtonUI;
+
 //extern SDL_Keycode lastSDLPressedKey;
 
+const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c'};
+
 ////////////////////////////////////////////////
+
+int touchXToBlock(int _passedTouchX){
+	return floor((_passedTouchX-globalDrawXOffset)/singleBlockSize);
+}
+int touchYToBlock(int _passedTouchY){
+	return floor((_passedTouchY-globalDrawYOffset)/singleBlockSize);
+}
 
 char isBigEndian(){
 	volatile u32 i=0x01234567;
@@ -442,7 +458,7 @@ uiElement* getUIByID(s16 _passedId){
 			return &(myUIBar[i]);
 		}
 	}
-	printf("Couldn't find the UI with id %d. You didn't delete it, right?",_passedId);
+	//printf("Couldn't find the UI with id %d. You didn't delete it, right?",_passedId);
 	return NULL;
 }
 void updateNoteIcon(){
@@ -663,8 +679,13 @@ void uiCount(){
 	}
 	_maxFontWidth+=CONSTCHARW;
 
-	// Space between
-	u16 _noteVSpace=singleBlockSize+CONSTCHARW; // TODO - Change if I change font size. 
+	// Space between the notes on y axis
+	u16 _noteVSpace;
+	if (isMobile){ // On mobile, keep everything as compressed as possible
+		_noteVSpace = singleBlockSize;
+	}else{
+		_noteVSpace = singleBlockSize + CONSTCHARW;
+	}
 	u16 _columnTotalNotes = ((visiblePageHeight*singleBlockSize)/_noteVSpace);
 	u16 _totalColumns = ceil((totalNotes-1)/(double)_columnTotalNotes);
 	while (1){
@@ -823,6 +844,7 @@ void setTotalNotes(u16 _newTotal){
 	}
 	noteImages = realloc(noteImages,sizeof(CrossTexture*)*_newTotal);
 	noteSounds = realloc(noteSounds,sizeof(CROSSSFX**)*_newTotal);
+	extraNoteInfo = recalloc(extraNoteInfo,sizeof(noteInfo)*totalNotes,sizeof(noteInfo)*_newTotal);
 
 	int i;
 	for (i=totalNotes;i<_newTotal;++i){
@@ -899,7 +921,12 @@ int L_addNote(lua_State* passedState){
 	}
 	return 0;
 }
-
+int L_setNoteGearData(lua_State* passedState){
+	int i = lua_tonumber(passedState,1);
+	extraNoteInfo[i].letter = lua_tostring(passedState,2)[0];
+	extraNoteInfo[i].accidental = lua_tostring(passedState,3)[0];
+	return 0;
+}
 int L_swapUI(lua_State* passedState){
 	int _slot1 = lua_tonumber(passedState,1);
 	int _slot2 = lua_tonumber(passedState,2);
@@ -947,6 +974,7 @@ void pushLuaFunctions(){
 	LUAREGISTER(L_deleteUI,"deleteUI");
 	LUAREGISTER(L_addUI,"addUI");
 	LUAREGISTER(L_setSpecialID,"setSpecialID");
+	LUAREGISTER(L_setNoteGearData,"setGearInfo");
 }
 
 void die(const char* message){
@@ -1014,31 +1042,35 @@ void playColumn(s32 _columnNumber){
 		}
 	}
 }
-void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound){
-	if (songArray[_y][_x].id==audioGearID){
-		free(songArray[_y][_x].extraData);
+void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound, noteSpot** _passedSong){
+	if (_passedSong[_y][_x].id==audioGearID){
+		free(_passedSong[_y][_x].extraData);
 	}
 	if (_noteId==audioGearID){
-		songArray[_y][_x].extraData = calloc(1,AUDIOGEARSPACE*sizeof(u8)*2);
+		_passedSong[_y][_x].extraData = calloc(1,AUDIOGEARSPACE*sizeof(u8)*2);
 	}else{
-		songArray[_y][_x].extraData=NULL;
+		_passedSong[_y][_x].extraData=NULL;
 	}
 	if (_shouldPlaySound){
-		goodPlaySound(noteSounds[_noteId][_y]);
+		if (noteSounds[_noteId][_y]!=NULL){
+			goodPlaySound(noteSounds[_noteId][_y]);
+		}
 	}
-	songArray[_y][_x].id=_noteId;
+	_passedSong[_y][_x].id=_noteId;
 }
 void placeNote(int _x, int _y, u16 _noteId){
 	
 	if (_noteId==audioGearID && songArray[_y][_x].id==audioGearID){
+		controlLoop();
 		audioGearGUI(songArray[_y][_x].extraData);
+		controlLoop();
 	}/*else if (songArray[_y][_x].id==_noteId){
 		return;
 	}*/else{
 		if (_x>maxX){
 			maxX=_x;
 		}
-		_placeNoteLow(_x,_y,_noteId,noteSounds[_noteId][_y]!=NULL && optionPlayOnPlace);
+		_placeNoteLow(_x,_y,_noteId,optionPlayOnPlace,songArray);
 	}
 }
 
@@ -1091,10 +1123,21 @@ void noteUIControls(){
 	}
 }
 
-void drawUI(uiElement* _passedUIBar){
+void drawSingleUI(uiElement* _passedElement, int _drawSlot){
+	drawImageScaleAlt(_passedElement->image,_drawSlot*singleBlockSize,visiblePageHeight*singleBlockSize,generalScale,generalScale);
+}
+
+void drawUIPointers(uiElement** _passedUIBar, int _totalLength){
+	int i;
+	for (i=0;i<_totalLength;++i){
+		drawSingleUI(_passedUIBar[i],i);
+	}
+}
+
+void drawUIBar(uiElement* _passedUIBar){
 	int i;
 	for (i=uiScrollOffset;i<uiPageSize+uiScrollOffset;++i){
-		drawImageScaleAlt(_passedUIBar[i].image,(i-uiScrollOffset)*singleBlockSize,visiblePageHeight*singleBlockSize,generalScale,generalScale);
+		drawSingleUI(&(_passedUIBar[i]),(i-uiScrollOffset));
 	}
 }
 
@@ -1103,11 +1146,37 @@ void doUsualDrawing(){
 	if (currentlyPlaying){
 		drawPlayBar(currentPlayPosition);
 	}
-	drawUI(myUIBar);
+	drawUIBar(myUIBar);
 	drawString(positionString,uiPageSize*singleBlockSize+CONSTCHARW/2,visiblePageHeight*singleBlockSize+CONSTCHARW/2);
 }
 
+void addChar(char* _sourceString, char _addChar){
+	int _gottenLength = strlen(_sourceString);
+	_sourceString[_gottenLength]=_addChar;
+	_sourceString[_gottenLength+1]='\0';
+}
+
 void audioGearGUI(u8* _gearData){
+	// UI variables
+	uiElement* _foundUpUI = NULL;
+	uiElement* _gearUIPointers[6];
+	u8 _totalGearUI=0;
+	u8 _backUIIndex;
+	u8 _infoUIIndex;
+	// Add some UI elements
+	_gearUIPointers[_totalGearUI++] = getUIByID(UNIQUE_SELICON);
+	// If we have up and down buttons, add them to this too.
+	_foundUpUI = getUIByID(UNIQUE_UPBUTTON);
+	if (_foundUpUI!=NULL){
+		_gearUIPointers[_totalGearUI++]=_foundUpUI;
+		_gearUIPointers[_totalGearUI++]=getUIByID(UNIQUE_DOWNBUTTON);
+	}
+	// Always have these
+	_gearUIPointers[_totalGearUI++]=&infoButtonUI;
+		_infoUIIndex = _totalGearUI-1;
+	_gearUIPointers[_totalGearUI++]=&backButtonUI;
+		_backUIIndex = _totalGearUI-1;
+
 	noteSpot** _fakedMapArray=malloc(sizeof(noteSpot*)*songHeight);
 	int i;
 	for (i=0;i<songHeight;++i){
@@ -1120,12 +1189,89 @@ void audioGearGUI(u8* _gearData){
 	}
 	while(1){
 		controlsStart();
+		if (wasJustPressed(SCE_TOUCH)){
+			int _placeX = touchXToBlock(touchX);
+			int _placeY = touchYToBlock(touchY);
+			if (_placeY==visiblePageHeight){
+				if (_placeX<_totalGearUI){
+					if (_placeX==_backUIIndex){
+						break;
+					}else if (_placeX==_infoUIIndex){
+						controlLoop();
+						char _completeString[AUDIOGEARSPACE*3+1+(AUDIOGEARSPACE-1)];
+						_completeString[0]='\0';
+						for (i=0;i<AUDIOGEARSPACE;++i){
+							int j;
+							for (j=0;j<songHeight;++j){
+								if (_fakedMapArray[j][i].id!=0){
+									if (i!=0){
+										addChar(_completeString,' ');
+									}
+									addChar(_completeString,extraNoteInfo[_fakedMapArray[j][i].id].letter);
+									addChar(_completeString,noteNames[j]);
+									addChar(_completeString,extraNoteInfo[_fakedMapArray[j][i].id].accidental);
+									break;
+								}
+							}
+						}
+						
+						while(1){
+							controlsStart();
+							if (wasJustPressed(SCE_TOUCH)){
+								break;
+							}
+							controlsEnd();
+							startDrawing();
+							drawString(_completeString,0,0);
+							endDrawing();
+						}
+
+						controlLoop();
+					}else{
+						controlLoop();
+						_gearUIPointers[_placeX]->activateFunc();
+						controlLoop();
+					}
+				}
+			}else{
+				if (selectedNote==0 || extraNoteInfo[selectedNote].letter!=0){ // Restirct notes we can't use in audio gear to notes with audio gear letters or symbols
+					// Clear any other notes we have in the same column.
+					// Because 0 is a valid note id to place, clicking anywhere in a column with note id 0 will erase everything in that column
+					for (i=0;i<songHeight;++i){
+						_fakedMapArray[i][_placeX].id=0;
+					}
+					// Place our new note
+					_placeNoteLow(_placeX,_placeY+songYOffset,selectedNote,optionPlayOnPlace,_fakedMapArray);
+				}
+			}
+		}
+		if (wasJustPressed(SCE_ANDROID_BACK)){
+			break;
+		}
 		noteUIControls();
 		controlsEnd();
 		startDrawing();
-		drawSong(_fakedMapArray,AUDIOGEARSPACE,visiblePageHeight,0,0);
+		drawSong(_fakedMapArray,AUDIOGEARSPACE,visiblePageHeight,0,songYOffset);
+		drawUIPointers(_gearUIPointers,_totalGearUI);
 		endDrawing();
 	}
+	//
+	// Transfer data from song map to audio gear	
+	for (i=0;i<AUDIOGEARSPACE;++i){
+		int j;
+		for (j=0;j<songHeight;++j){
+			if (_fakedMapArray[j][i].id!=0){
+				_gearData[i*2]=_fakedMapArray[j][i].id;
+				_gearData[i*2+1]=j;
+				break;
+			}
+		}
+	}
+	// Free faked map
+	for (i=0;i<songHeight;++i){
+		free(_fakedMapArray[i]);
+	}
+	free(_fakedMapArray);
 }
 
 void init(){
@@ -1211,9 +1357,11 @@ void init(){
 		_newButton = addUI();
 		_newButton->image = loadEmbeddedPNG("assets/Free/Images/upButton.png");
 		_newButton->activateFunc = uiUp;
+		_newButton->uniqueId = UNIQUE_UPBUTTON;
 		_newButton = addUI();
 		_newButton->image = loadEmbeddedPNG("assets/Free/Images/downButton.png");
 		_newButton->activateFunc = uiDown;
+		_newButton->uniqueId = UNIQUE_DOWNBUTTON;
 	}
 
 	// Add yellow play button
@@ -1247,6 +1395,16 @@ void init(){
 	_newButton = addUI();
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/loadButton.png");
 	_newButton->activateFunc = uiLoad;
+
+
+	// Two general use UI buttons
+	backButtonUI.image = loadEmbeddedPNG("assets/Free/Images/backButton.png");
+	backButtonUI.activateFunc = NULL;
+	backButtonUI.uniqueId=-1;
+
+	infoButtonUI.image = loadEmbeddedPNG("assets/Free/Images/infoButton.png");
+	infoButtonUI.activateFunc = NULL;
+	infoButtonUI.uniqueId=-1;
 
 	// Very last, run the init script
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
@@ -1293,8 +1451,8 @@ int main(int argc, char *argv[]){
 				_lastPlaceX=-1;
 			}
 			// We need to use floor so that negatives are not made positive
-			int _placeX = floor((touchX-globalDrawXOffset)/singleBlockSize);
-			int _placeY = floor((touchY-globalDrawYOffset)/singleBlockSize);
+			int _placeX = touchXToBlock(touchX);
+			int _placeY = touchYToBlock(touchY);
 			if (_placeY==visiblePageHeight){ // If we click the UI section
 				if (wasJustPressed(SCE_TOUCH)){
 					_placeX+=uiScrollOffset;

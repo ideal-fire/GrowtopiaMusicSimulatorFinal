@@ -1,3 +1,8 @@
+local neutralAccidental='-';
+local sharpAccidental='#';
+local flatAccidental='b';
+
+
 -- For a sequential table, get the number of things that are not -1.
 function getNotNegativeOneLength(_passedTable)
 	local _totalValid=0;
@@ -122,7 +127,7 @@ function loadSingleNoteSounds(_filenameformatString)
 	return _returnLoadedTable;
 end
 
-function addTripleNotes(_soundFormat, _startId, _filenameNormal, _filenameSharp, _filenameFlat)
+function addTripleNotes(_soundFormat, _startId, _filenameNormal, _filenameSharp, _filenameFlat, _audioGearSymbol)
 	myNoteArray = {};
 	myNoteFlatArray = {};
 	myNoteFlatArray = {};
@@ -133,6 +138,12 @@ function addTripleNotes(_soundFormat, _startId, _filenameNormal, _filenameSharp,
 	addNote(_startId,loadImage(_filenameNormal),myNoteArray);
 	addNote(_startId+1,loadImage(_filenameSharp),myNoteSharpArray);
 	addNote(_startId+2,loadImage(_filenameFlat),myNoteFlatArray);
+
+	if (_audioGearSymbol~=nil) then
+		setGearInfo(_startId,_audioGearSymbol,neutralAccidental);
+		setGearInfo(_startId+1,_audioGearSymbol,sharpAccidental);
+		setGearInfo(_startId+2,_audioGearSymbol,flatAccidental);
+	end
 end
 
 function addSingleNote(_soundFormat, _startId, _filenameNormal)
@@ -184,20 +195,21 @@ myNoteFlatArray = {};
 myLoadedSoundsArray = {};
 
 -- Add piano notes
-addTripleNotes("assets/Proprietary/Sound/piano_%d.wav",1,"assets/Proprietary/Images/piano.png","assets/Proprietary/Images/pianoSharp.png","assets/Proprietary/Images/pianoFlat.png");
+addTripleNotes("assets/Proprietary/Sound/piano_%d.wav",1,"assets/Proprietary/Images/piano.png","assets/Proprietary/Images/pianoSharp.png","assets/Proprietary/Images/pianoFlat.png",'P');
 
 -- Add bass notes
-addTripleNotes("assets/Proprietary/Sound/bass_%d.wav",4,"assets/Proprietary/Images/bass.png","assets/Proprietary/Images/bassSharp.png","assets/Proprietary/Images/bassFlat.png");
+addTripleNotes("assets/Proprietary/Sound/bass_%d.wav",4,"assets/Proprietary/Images/bass.png","assets/Proprietary/Images/bassSharp.png","assets/Proprietary/Images/bassFlat.png",'B');
 
 -- Add drums, this is unique because only half of the note sounds are unique. Use the special function loadHalfSounds
 myNoteArray = sortLoadedSounds(loadHalfSounds("assets/Proprietary/Sound/drum_%d.wav"));
 addNote(7,loadImage("assets/Proprietary/Images/drum.png"),myNoteArray);
+setGearInfo(7,'D',neutralAccidental); -- One of the only strange notes that can be used in audio gear
 
 -- Add the blank note, we don't have sounds for it.
 addNote(8,loadImage("assets/Proprietary/Images/blank.png"));
 
 -- Add sax notes
-addTripleNotes("assets/Proprietary/Sound/sax_%d.wav",9,"assets/Proprietary/Images/sax.png","assets/Proprietary/Images/saxSharp.png","assets/Proprietary/Images/saxFlat.png");
+addTripleNotes("assets/Proprietary/Sound/sax_%d.wav",9,"assets/Proprietary/Images/sax.png","assets/Proprietary/Images/saxSharp.png","assets/Proprietary/Images/saxFlat.png",'S');
 
 -- Add the repeat notes, no sound effects for them
 addNote(12,loadImage("assets/Proprietary/Images/repeatStart.png"));
@@ -214,10 +226,10 @@ addNote(15,loadImage("assets/Proprietary/Images/audioGear.png"));
 setSpecialID("audioGear",15);
 
 -- Add fltue notes
-addTripleNotes("assets/Proprietary/Sound/flute_%d.wav",16,"assets/Proprietary/Images/flute.png","assets/Proprietary/Images/fluteSharp.png","assets/Proprietary/Images/fluteFlat.png");
+addTripleNotes("assets/Proprietary/Sound/flute_%d.wav",16,"assets/Proprietary/Images/flute.png","assets/Proprietary/Images/fluteSharp.png","assets/Proprietary/Images/fluteFlat.png",'F');
 
 -- Add festive note, like spooky is it special
 addSingleNote("assets/Proprietary/Sound/festive_%d.wav",19,"assets/Proprietary/Images/festive.png");
 
 -- Add guitar notes
-addTripleNotes("assets/Proprietary/Sound/spanish_guitar_%d.wav",20,"assets/Proprietary/Images/guitar.png","assets/Proprietary/Images/guitarSharp.png","assets/Proprietary/Images/guitarFlat.png");
+addTripleNotes("assets/Proprietary/Sound/spanish_guitar_%d.wav",20,"assets/Proprietary/Images/guitar.png","assets/Proprietary/Images/guitarSharp.png","assets/Proprietary/Images/guitarFlat.png",'G');
