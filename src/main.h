@@ -1,12 +1,37 @@
+enum uiID{
+	U_SELICON,
+	U_PLAY,
+	U_SAVE,
+	U_LEFT,
+	U_RIGHT,
+	U_YPLAY,
+	U_UPBUTTON,
+	U_DOWNBUTTON,
+	U_BPM,
+	//U_SIZE,
+	//U_SETTINGS,	// Don't need constants for some of the more useless buttons
+	//U_COUNT,
+	//U_CREDITS,
+	U_LOAD,
+	//
+	U_BACK,
+	U_INFO,
+	U_VOL,
+	//
+	U_RESERVED // Always last
+};
+
 typedef void(*voidFunc)();
 typedef struct{
 	CrossTexture* image;
 	voidFunc activateFunc;
-	s16 uniqueId;
+	enum uiID uniqueId;
 }uiElement;
 typedef struct{
 	u8 id;
 	u8* extraData; // For audio gears, this could be their data. For repeat notes, it could be temp data about if they've been used or not.
+		// For repeat notes, it's NULL if they have not been used or 1 if they have
+		// For audio gears, it's a malloc'd array of AUDIOGEARSPACE*sizeof(u8)*2+1 size. The first ten bytes are a note id, its y position, the next note id, its y position, and so on. The last byte, the 11th one, is the audio gear's volume, with 100 being the max and default.
 }noteSpot;
 typedef struct{
 	char letter;
@@ -37,7 +62,7 @@ int fixY(int _y);
 long getNumberInput(char* _prompt, long _defaultNumber);
 uiElement* getUIByID(s16 _passedId);
 void goodLuaDofile(lua_State* passedState, char* _passedFilename);
-void goodPlaySound(CROSSSFX* _passedSound);
+void goodPlaySound(CROSSSFX* _passedSound, int _volume);
 void init();
 void int2str(char* _outBuffer, int _inNumber);
 char isBigEndian();
