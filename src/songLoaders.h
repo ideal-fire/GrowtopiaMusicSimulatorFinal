@@ -174,7 +174,91 @@ void loadGMSOSong(FILE* fp){
 // This is my own loading code and I didn't look at yours. I don't have to abide to your restictive, evil license file.
 #define FILE_FORMAT_GTMUSIC 5
 void loadDumbGtmusicFormat(FILE* fp){
+	int _maxReadLine = 4*14+1; // 14 notes, 3 chars per note, 1 comma per note
+	char _readLine[_maxReadLine];
+	fgets(_readLine,_maxReadLine,fp); // First line is exactly %cernmusicsim;
+	fgets(_readLine,_maxReadLine,fp); // Second line is bpm=x
+	removeNewline(_readLine);
+	bpm = atoi(&(_readLine[strlen("bmp=")]));
+	// The file has space for up to 400 columns, but last I checked you only can use 100 columns.
+	int i;
+	for (i=0;i<400;++i){
+		fgets(_readLine,_maxReadLine,fp);
+		removeNewline(_readLine);
+		int _stringReadPosition=0;
+		int j;
+		// Notes are listed from bottom to top
+		// All lines start with a comma
+		// Last note (high B) does not end with a comma
+		for (j=0;j<14;++j){
+			// All lines start with a comma
+			_stringReadPosition++;
 
+			if (_stringReadPosition==strlen(_readLine)){ // If we're not at the end of the line without a high B
+				break;
+			}else{
+				if (_readLine[_stringReadPosition]!=','){ // If there's a note in this slot
+					char _foundLetter;
+					char _foundNoteName;
+					char _foundAccidental;
+
+					_foundLetter = _readLine[_stringReadPosition];
+					_foundNoteName = _readLine[_stringReadPosition+1];
+					_foundAccidental = _readLine[_stringReadPosition+2];
+
+					// Find note ID using info we have
+					char _foundActualNoteID=0;
+					if (_foundLetter=='L'){ // Blank
+						printf("Cannot load blank notes from stupid format\n");
+					}else if (_foundLetter=='r'){ // Repeat start
+						_foundActualNoteID = repeatStartID;
+					}else if (_foundLetter=='R'){ // Repeat end
+						_foundActualNoteID = repeatEndID;
+					}else if (_foundLetter=='H'){ // Spooky
+						printf("Cannot load spooky notes from stupid format\n");
+					}else{
+						int k;
+						// Find the note's ID based on the letter and accidental
+						for (k=0;k<totalNotes;++k){
+							if (extraNoteInfo[k].letter==_foundLetter && extraNoteInfo[k].accidental==_foundAccidental){
+								_foundActualNoteID=k;
+								break;
+							}
+						}
+					}
+
+					// If we found the note, use more info to place it
+					if (_foundActualNoteID!=0){
+						// Find the position that goes with that note name
+						int l;
+						for (l=0;l<sizeof(noteNames);++l){
+							if (_foundNoteName==noteNames[l]){
+								_placeNoteLow(i,l,_foundActualNoteID,0,songArray);
+								break;
+							}
+						}
+					}else{
+						printf("Note not found, %c%c%c\n%s\n",_foundLetter,_foundNoteName,_foundAccidental,_readLine);
+					}
+					// We only read two more bytes than we normally would because the first letter is the comma we always read
+					_stringReadPosition+=2;
+				}
+			}
+	
+			/*
+				addChar(_completeString,extraNoteInfo[_fakedMapArray[j][i].id].letter);
+				addChar(_completeString,noteNames[j]);
+				addChar(_completeString,extraNoteInfo[_fakedMapArray[j][i].id].accidental);
+			*/
+
+		}
+	}
+	findMaxX();
+	// More authentic
+	if (maxX<=100){
+		setSongWidth(songArray,songWidth,100);
+		songWidth=100;
+	}
 }
 
 // File format of Growtopia Music Simulator Final

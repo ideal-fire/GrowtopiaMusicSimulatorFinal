@@ -1,3 +1,4 @@
+// Always add elements right before U_RESERVED, otherwise saved hotkey config breaks.
 enum uiID{
 	U_SELICON,
 	U_PLAY,
@@ -8,10 +9,10 @@ enum uiID{
 	U_UPBUTTON,
 	U_DOWNBUTTON,
 	U_BPM,
-	//U_SIZE,
-	//U_SETTINGS,	// Don't need constants for some of the more useless buttons
-	//U_COUNT,
-	//U_CREDITS,
+	U_SIZE,
+	U_SETTINGS,
+	U_COUNT,
+	U_CREDITS,
 	U_LOAD,
 	//
 	U_BACK,

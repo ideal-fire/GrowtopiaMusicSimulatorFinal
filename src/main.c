@@ -8,10 +8,12 @@ This is code is free software.
 	Not "free" as in "Lol, here's a 20 page license file even I've never read. if you modify my code, your code now belongs to the 20 page license file too. dont even think about using this code in a way that doesnt align with my ideology. its freedom, I promise"
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code." For actual license, see LICENSE file.
 
-todo - Add master volume setting. Morons want it and don't know how to use volume mixer
-
-todo - should keystrokes be based on unique ID or based on UI position?
-	methinks unique ID in case I need to move a UI
+todo - make hotkey setup. data is stored with UI unique ID.
+todo - Add saving
+todo - Add loading for mobile devices
+todo - Add settings saving, including hotkey config saving
+todo - Add icon to the exe
+todo - Redo some of the more ugly icons, like BPM
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -150,6 +152,8 @@ uiElement backButtonUI;
 uiElement infoButtonUI;
 uiElement volumeButtonUI; // Can use this for both master volume and audio gear volume
 
+int uiUIScrollIndex=-1;
+
 //extern SDL_Keycode lastSDLPressedKey;
 
 const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c'};
@@ -215,7 +219,7 @@ char* selectLoadFile(){
 		return _readLine;
 	#else
 		nfdchar_t *outPath = NULL;
-		nfdresult_t result = NFD_OpenDialog( "GMSF,AngryLegGuy,mylegguy", NULL, &outPath );
+		nfdresult_t result = NFD_OpenDialog( "GMSF,gtmusic,AngryLegGuy,mylegguy", NULL, &outPath );
 		if (result == NFD_OKAY){
 			return outPath;
 		}else if ( result == NFD_CANCEL ){
@@ -541,7 +545,7 @@ void playAtPosition(s32 _startPosition){
 #include "songLoaders.h"
 
 void uiSave(){
-
+	printf("TODO - Saving.\n");
 }
 
 void uiLoad(){
@@ -554,7 +558,7 @@ void uiLoad(){
 
 void uiUIScroll(){
 	if (uiScrollOffset==0){
-		uiScrollOffset=totalUI-uiPageSize;
+		uiScrollOffset=uiUIScrollIndex;
 	}else{
 		uiScrollOffset=0;
 	}
@@ -1141,6 +1145,9 @@ void drawUIPointers(uiElement** _passedUIBar, int _totalLength){
 void drawUIBar(uiElement* _passedUIBar){
 	int i;
 	for (i=uiScrollOffset;i<uiPageSize+uiScrollOffset;++i){
+		if (i==totalUI){
+			break;
+		}
 		drawSingleUI(&(_passedUIBar[i]),(i-uiScrollOffset));
 	}
 }
@@ -1450,6 +1457,7 @@ void init(){
 			myUIBar[i+1] = myUIBar[i];
 		}
 		memcpy(&(myUIBar[uiPageSize-1]),&_uiScrollButton,sizeof(uiElement));
+		uiUIScrollIndex = uiPageSize-1;
 	}else{
 		uiPageSize=totalUI;
 	}
@@ -1466,6 +1474,11 @@ int main(int argc, char *argv[]){
 
 	s16 _lastPlaceX=-1;
 	s16 _lastPlaceY=-1;
+
+	#ifdef ENABLEFPSCOUNTER
+		int _countedFrames=0;
+		int _lastFrameReport=getTicks();
+	#endif
 
 	// If not -1, draw a red rectangle at this UI slot
 	s32 _uiSelectedHighlight=-1;
@@ -1527,6 +1540,15 @@ int main(int argc, char *argv[]){
 			_uiSelectedHighlight=-1;
 		}
 		endDrawing();
+
+		#ifdef ENABLEFPSCOUNTER
+			_countedFrames++;
+			if (getTicks()>=_lastFrameReport+1000){
+				printf("Fps:%d\n",_countedFrames);
+				_lastFrameReport=getTicks();
+				_countedFrames=0;
+			}
+		#endif
 	}
 
 	/* code */
