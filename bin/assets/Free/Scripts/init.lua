@@ -144,6 +144,13 @@ function addTripleNotes(_soundFormat, _startId, _filenameNormal, _filenameSharp,
 		setGearInfo(_startId+1,_audioGearSymbol,sharpAccidental);
 		setGearInfo(_startId+2,_audioGearSymbol,flatAccidental);
 	end
+
+	-- Change the order to flat, normal, sharp
+	-- We had to add them in the wrong order to keep legacy Growtopia Music Simulator note IDs
+
+										  -- normal sharp flat
+	swapNoteUIOrder(_startId,_startId+1); -- sharp normal flat
+	swapNoteUIOrder(_startId,_startId+2); -- flat normal sharp
 end
 
 function addSingleNote(_soundFormat, _startId, _filenameNormal)

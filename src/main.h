@@ -14,6 +14,7 @@ enum uiID{
 	U_COUNT,
 	U_CREDITS,
 	U_LOAD,
+	U_KEYCONF,
 	//
 	U_BACK,
 	U_INFO,
@@ -26,7 +27,7 @@ typedef void(*voidFunc)();
 typedef struct{
 	CrossTexture* image;
 	voidFunc activateFunc;
-	enum uiID uniqueId;
+	u8 uniqueId;
 }uiElement;
 typedef struct{
 	u8 id;
@@ -38,6 +39,10 @@ typedef struct{
 	char letter;
 	char accidental;
 }noteInfo;
+typedef struct{
+	u8 id;
+	SDL_Keycode boundKey;
+}hotkeyConf;
 
 void _addNumberInput(long* _outNumber, char* _outBuffer, int _addNumber);
 void _delNumberInput(long* _outNumber, char* _outBuffer);

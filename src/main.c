@@ -9,8 +9,11 @@ This is code is free software.
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code." For actual license, see LICENSE file.
 
 todo - make hotkey setup. data is stored with UI unique ID.
+
 todo - Add saving
 todo - Add loading for mobile devices
+	Apparently, SDL_StartTextInput will bring up an actual keyboard for mobile devices.
+
 todo - Add settings saving, including hotkey config saving
 todo - Add icon to the exe
 todo - Redo some of the more ugly icons, like BPM
@@ -104,7 +107,7 @@ u16 singleBlockSize=32;
 
 u8 isMobile;
 
-s32 selectedNote=0;
+s32 uiNoteIndex=0;
 u16 totalNotes=0;
 
 u8 currentlyPlaying=0;
@@ -132,6 +135,7 @@ CrossTexture** bgPartsLabel=NULL;
 CrossTexture** noteImages=NULL;
 CROSSSFX*** noteSounds=NULL;
 noteInfo* extraNoteInfo=NULL;
+u8* noteUIOrder=NULL; // Order of note IDs in the UI
 
 noteSpot** songArray;
 
@@ -159,6 +163,10 @@ int uiUIScrollIndex=-1;
 const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c'};
 
 ////////////////////////////////////////////////
+
+u8 getUINoteID(){
+	return noteUIOrder[uiNoteIndex];
+}
 
 u8* getGearVolume(u8* _passedExtraData){
 	return &(_passedExtraData[AUDIOGEARSPACE*sizeof(u8)*2]);
@@ -193,6 +201,7 @@ void setSongXOffset(int _newValue){
 	sprintf(positionString,"%d/%d",songXOffset+!optionZeroBasedPosition,songWidth);
 }
 
+// Will memory leak audio gears
 void clearSong(){
 	setSongXOffset(0);
 	setSongWidth(songArray,songWidth,400);
@@ -467,7 +476,7 @@ uiElement* getUIByID(s16 _passedId){
 void updateNoteIcon(){
 	uiElement* _noteIconElement = getUIByID(U_SELICON);
 	if (_noteIconElement!=NULL){
-		_noteIconElement->image=noteImages[selectedNote];
+		_noteIconElement->image=noteImages[getUINoteID()];
 	}
 }
 
@@ -554,6 +563,54 @@ void uiLoad(){
 		loadSong(_chosenFile);
 	}
 	free(_chosenFile);
+}
+
+void uiKeyConf(){
+	int _iconSize = singleBlockSize+CONSTCHARW;
+	int _elementsPerColumn = (visiblePageHeight*singleBlockSize)/(_iconSize);
+	int _totalNoteColumns = ceil(totalNotes/_elementsPerColumn);
+	int _totalUIColumns = ceil(totalUI/_elementsPerColumn);
+	/*
+	lastSDLPressedKey!=SDLK_UNKNOWN
+	type is SDL_Keycode
+	*/
+	// First save u8 with number of notes
+	//	List as long as that number with note ID and the hotkey
+	// Second save a u8 with number of UI
+	//	List as long as that number with UI ID and the hotkey
+	while(1){
+		controlsStart();
+		if (wasJustPressed(SCE_TOUCH)){
+			int _fixedTouchX = touchX-globalDrawXOffset;
+			int _fixedTouchY = touchY-globalDrawYOffset;
+			if (_fixedTouchX<_totalNoteColumns*_iconSize){
+				printf("note.\n");
+			}else{
+				printf("ui\n");
+			}
+		}
+		controlsEnd();
+		startDrawing();
+		int i;
+		// Draw notes
+		for (i=0;i<_totalNoteColumns;++i){
+			int j;
+			int _totalDraw = totalNotes-i*_elementsPerColumn<_elementsPerColumn ? totalNotes-i*_elementsPerColumn : _elementsPerColumn;
+			for (j=0;j<_totalDraw;++j){
+				drawImageScaleAlt(noteImages[i*_elementsPerColumn+j],i*(singleBlockSize+CONSTCHARW),j*(singleBlockSize+CONSTCHARW),generalScale,generalScale);
+			}
+		}
+		// Draw UI
+		for (i=0;i<_totalUIColumns;++i){
+			int j;
+			int _totalDraw = totalUI-i*_elementsPerColumn<_elementsPerColumn ? totalUI-i*_elementsPerColumn : _elementsPerColumn;
+			for (j=0;j<_totalDraw;++j){
+				drawImageScaleAlt(myUIBar[i*_elementsPerColumn+j].image,(i+_totalNoteColumns)*(singleBlockSize+CONSTCHARW),j*(singleBlockSize+CONSTCHARW),generalScale,generalScale);
+			}
+		}
+		endDrawing();
+
+	}
 }
 
 void uiUIScroll(){
@@ -762,9 +819,9 @@ void uiLeft(){
 }
 
 void uiNoteIcon(){
-	selectedNote++;
-	if (selectedNote==totalNotes){
-		selectedNote=0;
+	uiNoteIndex++;
+	if (uiNoteIndex==totalNotes){
+		uiNoteIndex=0;
 	}
 	updateNoteIcon();
 }
@@ -845,9 +902,11 @@ void setTotalNotes(u16 _newTotal){
 	if (_newTotal<=totalNotes){
 		return;
 	}
+
 	noteImages = realloc(noteImages,sizeof(CrossTexture*)*_newTotal);
 	noteSounds = realloc(noteSounds,sizeof(CROSSSFX**)*_newTotal);
 	extraNoteInfo = recalloc(extraNoteInfo,sizeof(noteInfo)*totalNotes,sizeof(noteInfo)*_newTotal);
+	noteUIOrder = recalloc(noteUIOrder,sizeof(u8)*totalNotes,sizeof(u8)*_newTotal);
 
 	int i;
 	for (i=totalNotes;i<_newTotal;++i){
@@ -906,6 +965,7 @@ int L_addNote(lua_State* passedState){
 	// Don't need to check if we're actually adding
 	setTotalNotes(_passedSlot+1);
 
+	noteUIOrder[_passedSlot]=_passedSlot;
 	noteImages[_passedSlot] = lua_touserdata(passedState,2);
 	
 	if (lua_gettop(passedState)==3){
@@ -965,7 +1025,14 @@ int L_setSpecialID(lua_State* passedState){
 	}
 	return 0;
 }
-
+int L_swapNoteUIOrder(lua_State* passedState){
+	int _sourceIndex = lua_tonumber(passedState,1);
+	int _destIndex = lua_tonumber(passedState,2);
+	u8 _oldDestValue = noteUIOrder[_destIndex];
+	noteUIOrder[_destIndex]=noteUIOrder[_sourceIndex];
+	noteUIOrder[_sourceIndex]=_oldDestValue;
+	return 0;
+}
 void pushLuaFunctions(){
 	LUAREGISTER(L_addNote,"addNote");
 	LUAREGISTER(L_setBigBg,"setBigBg");
@@ -978,6 +1045,7 @@ void pushLuaFunctions(){
 	LUAREGISTER(L_addUI,"addUI");
 	LUAREGISTER(L_setSpecialID,"setSpecialID");
 	LUAREGISTER(L_setNoteGearData,"setGearInfo");
+	LUAREGISTER(L_swapNoteUIOrder,"swapNoteUIOrder");
 }
 
 void die(const char* message){
@@ -1116,15 +1184,15 @@ void drawSong(noteSpot** _songToDraw, int _drawWidth, int _drawHeight, int _xOff
 void noteUIControls(){
 	if (wasJustPressed(SCE_MOUSE_SCROLL)){
 		if (mouseScroll<0){
-			selectedNote--;
-			if (selectedNote<0){
-				selectedNote=totalNotes-1;
+			uiNoteIndex--;
+			if (uiNoteIndex<0){
+				uiNoteIndex=totalNotes-1;
 			}
 			updateNoteIcon();
 		}else if (mouseScroll>0){
-			selectedNote++;
-			if (selectedNote==totalNotes){
-				selectedNote=0;
+			uiNoteIndex++;
+			if (uiNoteIndex==totalNotes){
+				uiNoteIndex=0;
 			}
 			updateNoteIcon();
 		}// 0 scroll is ignored
@@ -1254,14 +1322,14 @@ void audioGearGUI(u8* _gearData){
 					}
 				}
 			}else{
-				if (selectedNote==0 || extraNoteInfo[selectedNote].letter!=0){ // Restirct notes we can't use in audio gear to notes with audio gear letters or symbols
+				if (getUINoteID()==0 || extraNoteInfo[getUINoteID()].letter!=0){ // Restirct notes we can't use in audio gear to notes with audio gear letters or symbols
 					// Clear any other notes we have in the same column.
 					// Because 0 is a valid note id to place, clicking anywhere in a column with note id 0 will erase everything in that column
 					for (i=0;i<songHeight;++i){
 						_fakedMapArray[i][_placeX].id=0;
 					}
 					// Place our new note
-					_placeNoteLow(_placeX,_placeY+songYOffset,selectedNote,optionPlayOnPlace,_fakedMapArray);
+					_placeNoteLow(_placeX,_placeY+songYOffset,getUINoteID(),optionPlayOnPlace,_fakedMapArray);
 				}
 			}
 		}
@@ -1424,6 +1492,11 @@ void init(){
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/loadButton.png");
 	_newButton->activateFunc = uiLoad;
 	_newButton->uniqueId = U_LOAD;
+	//
+	_newButton = addUI();
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/optionsButton.png");
+	_newButton->activateFunc = uiKeyConf;
+	_newButton->uniqueId = U_KEYCONF;
 
 
 	// Two general use UI buttons
@@ -1439,10 +1512,7 @@ void init(){
 	volumeButtonUI.activateFunc=NULL;
 	volumeButtonUI.uniqueId=U_VOL;
 
-	// Very last, run the init script
-	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
-	goodLuaDofile(L,tempPathFixBuffer);
-
+	// If we need more space for the UI because screen in small, add moreUI button
 	if (pageWidth<totalUI+3){ // 4 spaces for page number display. We only subtract 3 because we can use the labels on the far right as a UI spot
 		uiPageSize=pageWidth-3;
 		uiScrollImage = loadEmbeddedPNG("assets/Free/Images/moreUI.png");
@@ -1462,12 +1532,19 @@ void init(){
 		uiPageSize=totalUI;
 	}
 
+	// Very last, run the init script
+	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
+	goodLuaDofile(L,tempPathFixBuffer);
+
+	// Load hotkey config here because all UI and notes should be added by now.
+		// TODO
+
 	// Hopefully we've added some note images in the init.lua.
 	updateNoteIcon();
 }
 int main(int argc, char *argv[]){
 	printf("Loading...\n");
-	selectedNote=1;
+	uiNoteIndex=1;
 	init();
 	initEmbeddedFont();
 	printf("Done loading.\n");
@@ -1511,7 +1588,7 @@ int main(int argc, char *argv[]){
 					if (!(_placeX==_lastPlaceX && _placeY==_lastPlaceY)){ // Don't place where we've just placed. Otherwise we'd be placing the same note on top of itself 60 times per second
 						_lastPlaceX = _placeX;
 						_lastPlaceY = _placeY;
-						placeNote(_placeX+songXOffset,_placeY+songYOffset,selectedNote);
+						placeNote(_placeX+songXOffset,_placeY+songYOffset,getUINoteID());
 					}
 				}
 			}
