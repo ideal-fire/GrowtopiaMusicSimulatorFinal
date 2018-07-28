@@ -169,16 +169,13 @@ if (isMobile()) then
 
 	-- Load the images for empty slots and filled slots. There are 7 unique images.
 	for i=0,6 do
-		-- Do empty spot images first
 		myBGPartTableEmpty[i+1] = loadImage(string.format("assets/Free/Images/PartBG/empty%d.png",i));
 		-- Octave loop
 		myBGPartTableEmpty[i+8] = myBGPartTableEmpty[i+1];
-
-		
 	end
 
+	-- Do note labels next.
 	for i=0,13 do
-		-- Do note labels next. Fun fact, this note label feature was coincidentally used in somebody else's Growtopia Music Simulator....except he put the labels on the left side. What? I'm not implying anything.
 		myBGPartyTableLabel[i+1] = loadImage(string.format("assets/Free/Images/PartBG/label%d.png",i));
 		myBGPartyTableLabel[i+8] = myBGPartyTableLabel[i+1];
 	end

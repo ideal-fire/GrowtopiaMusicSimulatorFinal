@@ -9,11 +9,10 @@ This is code is free software.
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code." For actual license, see LICENSE file.
 
 todo - make hotkey setup. data is stored with UI unique ID.
-
+todo - add more Lua commands and a button to execute a Lua script. People could make like note shifting scripts and stuff
 todo - Add saving
 todo - Add loading for mobile devices
 	Apparently, SDL_StartTextInput will bring up an actual keyboard for mobile devices.
-
 todo - Add settings saving, including hotkey config saving
 todo - Add icon to the exe
 todo - Redo some of the more ugly icons, like BPM
@@ -91,6 +90,7 @@ u16 totalUI=0;
 u16 totalVisibleUI=0;
 u16 uiScrollOffset=0;
 uiElement* myUIBar=NULL;
+SDL_Keycode* uiHotkeys=NULL;
 
 CrossTexture* playButtonImage;
 CrossTexture* stopButtonImage;
@@ -136,6 +136,7 @@ CrossTexture** noteImages=NULL;
 CROSSSFX*** noteSounds=NULL;
 noteInfo* extraNoteInfo=NULL;
 u8* noteUIOrder=NULL; // Order of note IDs in the UI
+SDL_Keycode* noteHotkeys=NULL;
 
 noteSpot** songArray;
 
@@ -565,11 +566,20 @@ void uiLoad(){
 	free(_chosenFile);
 }
 
+// TODO - Use SDL_GetKeyName to get the actual names of the keys.
+	// There should be a new variable called _columnWidth with the cached max lenfth of all the strings.
+		// Check every frame if _columnWidth is set to -1, recalculate the max width
 void uiKeyConf(){
-	int _iconSize = singleBlockSize+CONSTCHARW;
-	int _elementsPerColumn = (visiblePageHeight*singleBlockSize)/(_iconSize);
+	int _columnWidth=-1;
+	int _iconHeight = singleBlockSize+CONSTCHARW;
+	int _elementsPerColumn = (visiblePageHeight*singleBlockSize)/(_iconHeight);
 	int _totalNoteColumns = ceil(totalNotes/_elementsPerColumn);
 	int _totalUIColumns = ceil(totalUI/_elementsPerColumn);
+
+	char _readyForInput=0;
+	char _isUISelected;
+	int _selectedIndex;
+
 	/*
 	lastSDLPressedKey!=SDLK_UNKNOWN
 	type is SDL_Keycode
@@ -580,34 +590,137 @@ void uiKeyConf(){
 	//	List as long as that number with UI ID and the hotkey
 	while(1){
 		controlsStart();
-		if (wasJustPressed(SCE_TOUCH)){
-			int _fixedTouchX = touchX-globalDrawXOffset;
-			int _fixedTouchY = touchY-globalDrawYOffset;
-			if (_fixedTouchX<_totalNoteColumns*_iconSize){
-				printf("note.\n");
+		noteUIControls();
+		if (!_readyForInput){
+			if (lastSDLPressedKey!=SDLK_UNKNOWN){
+				break;
+			}
+			if (wasJustPressed(SCE_TOUCH)){
+				int _fixedTouchX = touchX-globalDrawXOffset;
+				int _fixedTouchY = touchY-globalDrawYOffset;
+				int _selectedColumn = _fixedTouchX/_columnWidth;
+				int _iconYSelect = _fixedTouchY/_iconHeight;
+				if (_selectedColumn<_totalNoteColumns){
+					_isUISelected=0;
+					_selectedIndex = _iconYSelect+_selectedColumn*_elementsPerColumn;
+					if (_selectedIndex<totalNotes){
+						_readyForInput=1;
+					}
+				}else{
+					_isUISelected=1;
+					_selectedIndex = _iconYSelect+(_selectedColumn-_totalNoteColumns)*_elementsPerColumn;
+					if (_selectedIndex<totalUI){
+						_readyForInput=1;
+					}
+				}
+			}
+		}else{
+			if (wasJustPressed(SCE_TOUCH)){
+				// Do a frame perfect keypress and click at the same time to reset all hotkeys
+				if (lastSDLPressedKey!=SDLK_UNKNOWN){
+					printf("Reset all hotkeys.\n");
+					int i;
+					for (i=0;i<totalNotes;++i){
+						noteHotkeys[i]=SDLK_UNKNOWN;
+					}
+					for (i=0;i<totalUI;++i){
+						uiHotkeys[i] = SDLK_UNKNOWN;
+					}
+				}else{
+					_readyForInput=0;
+				}
 			}else{
-				printf("ui\n");
+				if (lastSDLPressedKey!=SDLK_UNKNOWN){
+					// Special cases first
+					if (lastSDLPressedKey==SDLK_ESCAPE){
+						_readyForInput=0;
+					}else{
+						// Overwrite duplicate hotkeys
+						int i;
+						for (i=0;i<totalNotes;++i){
+							if (noteHotkeys[i]==lastSDLPressedKey){
+								noteHotkeys[i] = SDLK_UNKNOWN;
+							}
+						}
+						for (i=0;i<totalUI;++i){
+							if (uiHotkeys[i]==lastSDLPressedKey){
+								uiHotkeys[i] = SDLK_UNKNOWN;
+							}
+						}
+						//
+						if (_isUISelected){
+							uiHotkeys[_selectedIndex]=lastSDLPressedKey;
+						}else{
+							noteHotkeys[_selectedIndex]=lastSDLPressedKey;
+						}
+						_readyForInput=0;
+						_columnWidth=-1;
+					}
+				}
 			}
 		}
 		controlsEnd();
+
+		if (_columnWidth==-1){
+			int _foundMaxStrlen=1;
+			int i;
+			for (i=0;i<totalNotes;++i){
+				if (noteHotkeys[i]!=SDLK_UNKNOWN){
+					const char* _lastStr = SDL_GetKeyName(noteHotkeys[i]);
+					if (strlen(_lastStr)>_foundMaxStrlen){
+						_foundMaxStrlen=strlen(_lastStr);
+					}
+				}
+			}
+			for (i=0;i<totalUI;++i){
+				if (uiHotkeys[i]!=SDLK_UNKNOWN){
+					const char* _lastStr = SDL_GetKeyName(uiHotkeys[i]);
+					if (strlen(_lastStr)>_foundMaxStrlen){
+						_foundMaxStrlen=strlen(_lastStr);
+					}
+				}
+			}
+			_columnWidth = singleBlockSize+CONSTCHARW*_foundMaxStrlen;
+		}
+
 		startDrawing();
-		int i;
-		// Draw notes
-		for (i=0;i<_totalNoteColumns;++i){
-			int j;
-			int _totalDraw = totalNotes-i*_elementsPerColumn<_elementsPerColumn ? totalNotes-i*_elementsPerColumn : _elementsPerColumn;
-			for (j=0;j<_totalDraw;++j){
-				drawImageScaleAlt(noteImages[i*_elementsPerColumn+j],i*(singleBlockSize+CONSTCHARW),j*(singleBlockSize+CONSTCHARW),generalScale,generalScale);
+		if (_readyForInput==0){
+			int i;
+			// Draw notes
+			for (i=0;i<_totalNoteColumns;++i){
+				int j;
+				int _totalDraw = totalNotes-i*_elementsPerColumn<_elementsPerColumn ? totalNotes-i*_elementsPerColumn : _elementsPerColumn;
+				for (j=0;j<_totalDraw;++j){
+					int _drawX = i*(_columnWidth);
+					int _drawY = j*(_iconHeight);
+					drawImageScaleAlt(noteImages[i*_elementsPerColumn+j],_drawX,_drawY,generalScale,generalScale);
+					if (noteHotkeys[i*_elementsPerColumn+j]!=SDLK_UNKNOWN){
+						drawString(SDL_GetKeyName(noteHotkeys[i*_elementsPerColumn+j]),_drawX+singleBlockSize,_drawY+CONSTCHARW/2);
+					}
+				}
 			}
-		}
-		// Draw UI
-		for (i=0;i<_totalUIColumns;++i){
-			int j;
-			int _totalDraw = totalUI-i*_elementsPerColumn<_elementsPerColumn ? totalUI-i*_elementsPerColumn : _elementsPerColumn;
-			for (j=0;j<_totalDraw;++j){
-				drawImageScaleAlt(myUIBar[i*_elementsPerColumn+j].image,(i+_totalNoteColumns)*(singleBlockSize+CONSTCHARW),j*(singleBlockSize+CONSTCHARW),generalScale,generalScale);
+			// Draw UI
+			for (i=0;i<_totalUIColumns;++i){
+				int j;
+				int _totalDraw = totalUI-i*_elementsPerColumn<_elementsPerColumn ? totalUI-i*_elementsPerColumn : _elementsPerColumn;
+				for (j=0;j<_totalDraw;++j){
+					int _drawX = (i+_totalNoteColumns)*(_columnWidth);
+					int _drawY = j*(_iconHeight);
+					drawImageScaleAlt(myUIBar[i*_elementsPerColumn+j].image,_drawX,_drawY,generalScale,generalScale);
+					if (uiHotkeys[i*_elementsPerColumn+j]!=SDLK_UNKNOWN){
+						drawString(SDL_GetKeyName(uiHotkeys[i*_elementsPerColumn+j]),_drawX+singleBlockSize,_drawY+CONSTCHARW/2);
+					}
+				}
 			}
+
+			drawString("Click an icon to set a hotkey for it.",CONSTCHARW,visiblePageHeight*singleBlockSize);
+			drawString("Press esc to go back.",CONSTCHARW,visiblePageHeight*singleBlockSize+CONSTCHARW);
+		}else{
+			drawImageScaleAlt(_isUISelected ? myUIBar[_selectedIndex].image : noteImages[_selectedIndex],CONSTCHARW,CONSTCHARW,generalScale*2,generalScale*2);
+			drawString("Press a key to bind it to this.",CONSTCHARW,generalScale*2*singleBlockSize+CONSTCHARW*2);
+			drawString("Click anywhere to cancel.",CONSTCHARW,generalScale*2*singleBlockSize+CONSTCHARW*3);
 		}
+
 		endDrawing();
 
 	}
@@ -837,6 +950,7 @@ int fixY(int _y){
 uiElement* addUI(){
 	++totalUI;
 	myUIBar = realloc(myUIBar,sizeof(uiElement)*totalUI);
+	uiHotkeys = recalloc(uiHotkeys,sizeof(SDL_Keycode)*(totalUI-1),sizeof(SDL_Keycode)*totalUI);
 	myUIBar[totalUI-1].uniqueId=-1;
 	return &(myUIBar[totalUI-1]);
 }
@@ -889,7 +1003,7 @@ char* possiblyFixPath(const char* _passedFilename, char _shouldFix){
 	}
 }
 
-void drawString(char* _passedString, int _x, int _y){
+void drawString(const char* _passedString, int _x, int _y){
 	// See fonthelper.h
 	_drawString(_passedString,_x,_y,generalScale,CONSTCHARW);
 }
@@ -907,6 +1021,7 @@ void setTotalNotes(u16 _newTotal){
 	noteSounds = realloc(noteSounds,sizeof(CROSSSFX**)*_newTotal);
 	extraNoteInfo = recalloc(extraNoteInfo,sizeof(noteInfo)*totalNotes,sizeof(noteInfo)*_newTotal);
 	noteUIOrder = recalloc(noteUIOrder,sizeof(u8)*totalNotes,sizeof(u8)*_newTotal);
+	noteHotkeys = recalloc(noteHotkeys,sizeof(SDL_Keycode)*totalNotes,sizeof(SDL_Keycode)*_newTotal);
 
 	int i;
 	for (i=totalNotes;i<_newTotal;++i){
@@ -1594,6 +1709,34 @@ int main(int argc, char *argv[]){
 			}
 		}
 		noteUIControls();
+		if (lastSDLPressedKey!=SDLK_UNKNOWN){
+			char _foundFriend=0;
+			int i;
+			for (i=0;i<totalNotes;++i){
+				if (noteHotkeys[i]==lastSDLPressedKey){
+					// noteUIOrder
+					int j;
+					for (j=0;j<totalNotes;++j){
+						if (noteUIOrder[j]==i){
+							uiNoteIndex=j;
+							_foundFriend=1;
+							break;
+						}
+					}
+					break;
+				}
+			}
+			if (!_foundFriend){
+				for (i=0;i<totalUI;++i){
+					if (uiHotkeys[i]==lastSDLPressedKey){
+						controlsEnd();
+						myUIBar[i].activateFunc();
+						controlLoop();
+						break;
+					}
+				}
+			}
+		}
 		controlsEnd();
 
 		// Process playing

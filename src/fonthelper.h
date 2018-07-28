@@ -32,7 +32,7 @@ SDL_Texture* getFontCharacter(int _asciiValue){
 	return _returnTexture;
 }
 // See wrapper in main.c
-void _drawString(char* _myString, int x, int y, double _scale, int _characterWidth){
+void _drawString(const char* _myString, int x, int y, double _scale, int _characterWidth){
 	int i;
 	int _cachedStrlen = strlen(_myString);
 	for (i=0;i<_cachedStrlen;++i){

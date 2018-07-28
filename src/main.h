@@ -59,7 +59,7 @@ void doUsualDrawing();
 void drawImageScaleAlt(CrossTexture* _passedTexture, int _x, int _y, double _passedXScale, double _passedYScale);
 void drawPlayBar(int _x);
 void drawSong(noteSpot** _songToDraw, int _drawWidth, int _drawHeight, int _xOffset, int _yOffset);
-void drawString(char* _passedString, int _x, int _y);
+void drawString(const char* _passedString, int _x, int _y);
 void drawUI(uiElement* _passedUIBar);
 void findMaxX();
 s16 fixShort(s16 _passedShort);
