@@ -1,21 +1,20 @@
 /*
-https://www.lua.org/manual/5.3/manual.html#lua_pushlightuserdata
-https://github.com/mlabbe/nativefiledialog
-
-https://forums.libsdl.org/viewtopic.php?p=15228
-
+/////////////////////////////////////////////////////////////////////////////
 This is code is free software.
 	Not "free" as in "Lol, here's a 20 page license file even I've never read. if you modify my code, your code now belongs to the 20 page license file too. dont even think about using this code in a way that doesnt align with my ideology. its freedom, I promise"
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code." For actual license, see LICENSE file.
+/////////////////////////////////////////////////////////////////////////////
+https://forums.libsdl.org/viewtopic.php?p=15228
 
-todo - make hotkey setup. data is stored with UI unique ID.
-todo - add more Lua commands and a button to execute a Lua script. People could make like note shifting scripts and stuff
 todo - Add saving
 todo - Add loading for mobile devices
 	Apparently, SDL_StartTextInput will bring up an actual keyboard for mobile devices.
 todo - Add settings saving, including hotkey config saving
 todo - Add icon to the exe
 todo - Redo some of the more ugly icons, like BPM
+todo - add optional update checker
+	Don't do with libGeneralGood
+		Should I use libCurl or SDL_Net?
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -279,7 +278,7 @@ void _delNumberInput(long* _outNumber, char* _outBuffer){
 		int2str(_outBuffer,*_outNumber);
 	}
 }
-long getNumberInput(char* _prompt, long _defaultNumber){
+long getNumberInput(const char* _prompt, long _defaultNumber){
 	controlLoop();
 	long _userInput=_defaultNumber;
 	char _userInputAsString[MAXINTINPUT+1]={'\0'};
@@ -566,9 +565,7 @@ void uiLoad(){
 	free(_chosenFile);
 }
 
-// TODO - Use SDL_GetKeyName to get the actual names of the keys.
-	// There should be a new variable called _columnWidth with the cached max lenfth of all the strings.
-		// Check every frame if _columnWidth is set to -1, recalculate the max width
+// TODO - Right click to unbind
 void uiKeyConf(){
 	int _columnWidth=-1;
 	int _iconHeight = singleBlockSize+CONSTCHARW;
@@ -579,15 +576,6 @@ void uiKeyConf(){
 	char _readyForInput=0;
 	char _isUISelected;
 	int _selectedIndex;
-
-	/*
-	lastSDLPressedKey!=SDLK_UNKNOWN
-	type is SDL_Keycode
-	*/
-	// First save u8 with number of notes
-	//	List as long as that number with note ID and the hotkey
-	// Second save a u8 with number of UI
-	//	List as long as that number with UI ID and the hotkey
 	while(1){
 		controlsStart();
 		noteUIControls();
@@ -1113,18 +1101,24 @@ int L_swapUI(lua_State* passedState){
 	myUIBar[_slot2]=_tempSwapHold;
 	return 0;
 }
-
 int L_deleteUI(lua_State* passedState){
 	int _slotIHate = lua_tonumber(passedState,1);
 	myUIBar[_slotIHate].image=NULL;
 	myUIBar[_slotIHate].activateFunc=NULL;
 	myUIBar[_slotIHate].uniqueId=-1;
+	if (_slotIHate==totalUI-1){
+		totalUI--;
+	}
 	return 0;
 }
 // Add a UI slot and return its number
 int L_addUI(lua_State* passedState){
 	addUI();
 	lua_pushnumber(passedState,totalUI-1);
+	return 1;
+}
+int L_getTotalUI(lua_State* passedState){
+	lua_pushnumber(passedState,totalUI);
 	return 1;
 }
 int L_setSpecialID(lua_State* passedState){
@@ -1148,6 +1142,131 @@ int L_swapNoteUIOrder(lua_State* passedState){
 	noteUIOrder[_sourceIndex]=_oldDestValue;
 	return 0;
 }
+int L_getSongWidth(lua_State* passedState){
+	lua_pushnumber(passedState,songWidth);
+	return 1;
+}
+int L_getSongHeight(lua_State* passedState){
+	lua_pushnumber(passedState,songHeight);
+	return 1;
+}
+int L_setSongWidth(lua_State* passedState){
+	setSongWidth(songArray,songWidth,lua_tonumber(passedState,1));
+	songWidth = lua_tonumber(passedState,1);
+	return 0;
+}
+
+int L_getNoteSpot(lua_State* passedState){
+	int _x = lua_tonumber(passedState,1);
+	int _y = lua_tonumber(passedState,2);
+	lua_pushnumber(passedState,songArray[_y][_x].id);
+	return 1;
+}
+int L_setNoteSpot(lua_State* passedState){
+	_placeNoteLow(lua_tonumber(passedState,1),lua_tonumber(passedState,2),lua_tonumber(passedState,3),0,songArray);
+	return 0;
+}
+int L_getAudioGearSize(lua_State* passedState){
+	lua_pushnumber(passedState,AUDIOGEARSPACE);
+	return 1;
+}
+// x y
+int L_getAudioGear(lua_State* passedState){
+	int _x = lua_tonumber(passedState,1);
+	int _y = lua_tonumber(passedState,2);
+	if (songArray[_y][_x].id!=audioGearID){
+		return 0;
+	}
+	u8* _gearData = songArray[_y][_x].extraData;
+	// New table is at the top of the stack
+	lua_newtable(passedState);
+	int i;
+	for (i=0;i<AUDIOGEARSPACE;++i){
+		// Add the note ID to the table first
+		// First push index of the place we want to set in the table
+		lua_pushnumber(passedState,(i*2)+1);
+		// Push our value for that index
+		lua_pushnumber(passedState,_gearData[i*2]);
+		// This pops the top two from the stack, the table is now back at the top
+		lua_settable(passedState,-3);
+
+		// Same as before, but we push add the Y position this time. It is possible to push uninitialized values here, but only if the pushed note ID is 0, so the programmer should ignore it anyway
+		lua_pushnumber(passedState,(i*2)+2);
+		lua_pushnumber(passedState,_gearData[i*2+1]);
+		lua_settable(passedState,-3);
+	}
+	// Table is still at the top of the stack
+	// Push the volume
+	lua_pushnumber(passedState,*getGearVolume(_gearData));
+	return 2;
+}
+// x y table volume
+int L_setAudioGear(lua_State* passedState){
+	int _x = lua_tonumber(passedState,1);
+	int _y = lua_tonumber(passedState,2);
+	lua_len(passedState,3);
+		int _tableLength = lua_tonumber(passedState,-1);
+		lua_pop(passedState,1);
+	if (songArray[_y][_x].id!=audioGearID){
+		_placeNoteLow(_x,_y,audioGearID,0,songArray);
+	}
+	u8* _gearData = songArray[_y][_x].extraData;
+	_tableLength/=2; // Half of the entries
+	int i;
+	for (i=0;i<_tableLength;++i){
+		lua_rawgeti(passedState,3,(i*2)+1); // Get ID from table
+		_gearData[i*2]=lua_tonumber(passedState,-1);
+		lua_pop(passedState,1);
+
+		lua_rawgeti(passedState,3,(i*2)+2); // Get Y position from table
+		_gearData[i*2+1]=lua_tonumber(passedState,-1);
+		lua_pop(passedState,1);
+	}
+	*getGearVolume(_gearData) = lua_tonumber(passedState,4);
+	return 0;
+}
+// one argument, the allowed file types
+int L_selectFile(lua_State* passedState){
+	#ifdef NO_FANCY_DIALOG
+		printf("Unsupported.\n");
+		return 0;
+	#else
+		nfdchar_t *outPath = NULL;
+		nfdresult_t result = NFD_OpenDialog( lua_tostring(passedState,1), NULL, &outPath );
+		if (result == NFD_OKAY){
+			lua_pushstring(passedState,outPath);
+			free(outPath);
+			return 1;
+		}else if ( result == NFD_CANCEL ){
+			return 0;
+		}else{
+			printf("Error: %s\n", NFD_GetError() );
+			return 0;
+		}
+	#endif
+}
+int L_findMaxX(lua_State* passedState){
+	findMaxX();
+	return 0;
+}
+int L_setMaxX(lua_State* passedState){
+	maxX = lua_tonumber(passedState,1);
+	return 0;
+}
+// prompt default
+int L_getNumberInput(lua_State* passedState){
+	long _returnedValue = getNumberInput(lua_tostring(passedState,1),lua_tonumber(passedState,2));
+	lua_pushnumber(passedState,_returnedValue);
+	return 1;
+}
+int L_getBPM(lua_State* passedState){
+	lua_pushnumber(passedState,bpm);
+	return 1;
+}
+int L_setBPM(lua_State* passedState){
+	bpm = lua_tonumber(passedState,1);
+	return 0;
+}
 void pushLuaFunctions(){
 	LUAREGISTER(L_addNote,"addNote");
 	LUAREGISTER(L_setBigBg,"setBigBg");
@@ -1157,10 +1276,26 @@ void pushLuaFunctions(){
 	LUAREGISTER(L_loadImage,"loadImage");
 	LUAREGISTER(L_swapUI,"swapUI");
 	LUAREGISTER(L_deleteUI,"deleteUI");
+	LUAREGISTER(L_getTotalUI,"getTotalUI");
 	LUAREGISTER(L_addUI,"addUI");
 	LUAREGISTER(L_setSpecialID,"setSpecialID");
 	LUAREGISTER(L_setNoteGearData,"setGearInfo");
 	LUAREGISTER(L_swapNoteUIOrder,"swapNoteUIOrder");
+	//
+	LUAREGISTER(L_getSongWidth,"getSongWidth");
+	LUAREGISTER(L_getSongHeight,"getSongHeight");
+	LUAREGISTER(L_setSongWidth,"setSongWidth");
+	LUAREGISTER(L_getNoteSpot,"getNoteSpot");
+	LUAREGISTER(L_setNoteSpot,"setNoteSpot");
+	LUAREGISTER(L_getAudioGearSize,"getAudioGearSize");
+	LUAREGISTER(L_getAudioGear,"getAudioGear");
+	LUAREGISTER(L_setAudioGear,"setAudioGear");
+	LUAREGISTER(L_selectFile,"selectFile");
+	LUAREGISTER(L_findMaxX,"findMaxX");
+	LUAREGISTER(L_setMaxX,"setMaxX");
+	LUAREGISTER(L_getNumberInput,"getNumberInput");
+	LUAREGISTER(L_getBPM,"getBPM");
+	LUAREGISTER(L_setBPM,"setBPM");
 }
 
 void die(const char* message){

@@ -65,7 +65,7 @@ void findMaxX();
 s16 fixShort(s16 _passedShort);
 int fixX(int _x);
 int fixY(int _y);
-long getNumberInput(char* _prompt, long _defaultNumber);
+long getNumberInput(const char* _prompt, long _defaultNumber);
 uiElement* getUIByID(s16 _passedId);
 void goodLuaDofile(lua_State* passedState, char* _passedFilename);
 void goodPlaySound(CROSSSFX* _passedSound, int _volume);

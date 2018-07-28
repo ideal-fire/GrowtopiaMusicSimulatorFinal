@@ -25,6 +25,7 @@ void loadGMSClassicSong(FILE* fp){
 #define FILE_FORMAT_GMSANDROID 2
 void loadGMSASong(FILE* fp){
 	printf("Maybe if I'm board enough. Maybe I could add a feature to Growtopia Music Simulator Android where people can upload their songs to pastebin!");
+	printf("Actually, another idea is to make it so Growtopia Music Simulator Final has the same App ID, then I can just open the user's old songs.");
 }
 
 // File format of Growtopia Music Simulator Reborn
