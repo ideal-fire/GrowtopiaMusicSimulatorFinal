@@ -1,20 +1,20 @@
 /*
 /////////////////////////////////////////////////////////////////////////////
-This is code is free software.
-	Not "free" as in "Lol, here's a 20 page license file even I've never read. if you modify my code, your code now belongs to the 20 page license file too. dont even think about using this code in a way that doesnt align with my ideology. its freedom, I promise"
-	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code." For actual license, see LICENSE file.
+This code is free software.
+	Not "free" as in "lol, here's a 20 page license file even I've never read. if you modify my code, your code now belongs to the 20 page license file too. dont even think about using this code in a way that doesnt align with my ideology. its freedom, I promise"
+	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code because i worked hard" For actual license, see LICENSE file.
 /////////////////////////////////////////////////////////////////////////////
 https://forums.libsdl.org/viewtopic.php?p=15228
 
 todo - Add saving
+todo - Add settings saving, including hotkey config saving
 todo - Add loading for mobile devices
 	Apparently, SDL_StartTextInput will bring up an actual keyboard for mobile devices.
-todo - Add settings saving, including hotkey config saving
-todo - Add icon to the exe
-todo - Redo some of the more ugly icons, like BPM
 todo - add optional update checker
 	Don't do with libGeneralGood
 		Should I use libCurl or SDL_Net?
+todo - Add icon to the exe
+	todo - Redo some of the more ugly icons, like BPM
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,6 +37,7 @@ todo - add optional update checker
 #endif
 
 #include "fonthelper.h"
+#include "luaDofileEmbedded.h"
 
 #define ISTESTINGMOBILE 0
 #define DISABLESOUND 0
@@ -163,6 +164,10 @@ int uiUIScrollIndex=-1;
 const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c'};
 
 ////////////////////////////////////////////////
+
+void loadHotkeys(){
+
+}
 
 u8 getUINoteID(){
 	return noteUIOrder[uiNoteIndex];
@@ -1748,7 +1753,6 @@ void init(){
 	_newButton->activateFunc = uiKeyConf;
 	_newButton->uniqueId = U_KEYCONF;
 
-
 	// Two general use UI buttons
 	backButtonUI.image = loadEmbeddedPNG("assets/Free/Images/backButton.png");
 	backButtonUI.activateFunc = NULL;
@@ -1786,6 +1790,8 @@ void init(){
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
 	goodLuaDofile(L,tempPathFixBuffer);
 
+	makeDataDirectory();
+
 	// Load hotkey config here because all UI and notes should be added by now.
 		// TODO
 
@@ -1806,7 +1812,6 @@ int main(int argc, char *argv[]){
 		int _countedFrames=0;
 		int _lastFrameReport=getTicks();
 	#endif
-
 	// If not -1, draw a red rectangle at this UI slot
 	s32 _uiSelectedHighlight=-1;
 	while(1){
@@ -1838,7 +1843,7 @@ int main(int argc, char *argv[]){
 					if (!(_placeX==_lastPlaceX && _placeY==_lastPlaceY)){ // Don't place where we've just placed. Otherwise we'd be placing the same note on top of itself 60 times per second
 						_lastPlaceX = _placeX;
 						_lastPlaceY = _placeY;
-						placeNote(_placeX+songXOffset,_placeY+songYOffset,getUINoteID());
+						placeNote(_placeX+songXOffset,_placeY+songYOffset,lastClickWasRight ? 0 : getUINoteID());
 					}
 				}
 			}
