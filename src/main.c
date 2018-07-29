@@ -570,13 +570,12 @@ void uiLoad(){
 	free(_chosenFile);
 }
 
-// TODO - Right click to unbind
 void uiKeyConf(){
 	int _columnWidth=-1;
 	int _iconHeight = singleBlockSize+CONSTCHARW;
 	int _elementsPerColumn = (visiblePageHeight*singleBlockSize)/(_iconHeight);
-	int _totalNoteColumns = ceil(totalNotes/_elementsPerColumn);
-	int _totalUIColumns = ceil(totalUI/_elementsPerColumn);
+	int _totalNoteColumns = ceil(totalNotes/(double)_elementsPerColumn);
+	int _totalUIColumns = ceil(totalUI/(double)_elementsPerColumn);
 
 	char _readyForInput=0;
 	char _isUISelected;
@@ -585,7 +584,7 @@ void uiKeyConf(){
 		controlsStart();
 		noteUIControls();
 		if (!_readyForInput){
-			if (lastSDLPressedKey!=SDLK_UNKNOWN){
+			if (lastSDLPressedKey==SDLK_ESCAPE){
 				break;
 			}
 			if (wasJustPressed(SCE_TOUCH)){
@@ -605,6 +604,16 @@ void uiKeyConf(){
 					if (_selectedIndex<totalUI){
 						_readyForInput=1;
 					}
+				}
+
+				if (lastClickWasRight){
+					if (_isUISelected){
+						uiHotkeys[_selectedIndex]=SDLK_UNKNOWN;
+					}else{
+						noteHotkeys[_selectedIndex]=SDLK_UNKNOWN;
+					}
+					_readyForInput=0;
+					_columnWidth=-1;
 				}
 			}
 		}else{
@@ -1490,6 +1499,37 @@ void addChar(char* _sourceString, char _addChar){
 	_sourceString[_gottenLength+1]='\0';
 }
 
+char uiHotkeyCheck(){
+	int i;
+	for (i=0;i<totalUI;++i){
+		if (uiHotkeys[i]==lastSDLPressedKey){
+			controlsEnd();
+			myUIBar[i].activateFunc();
+			controlLoop();
+			return 1;
+		}
+	}
+	return 0;
+}
+
+char noteHotkeyCheck(){
+	int i;
+	for (i=0;i<totalNotes;++i){
+		if (noteHotkeys[i]==lastSDLPressedKey){
+			// noteUIOrder
+			int j;
+			for (j=0;j<totalNotes;++j){
+				if (noteUIOrder[j]==i){
+					uiNoteIndex=j;
+					updateNoteIcon();
+					return 1;
+				}
+			}
+		}
+	}
+	return 0;
+}
+
 void audioGearGUI(u8* _gearData){
 	// UI variables
 	uiElement* _foundUpUI = NULL;
@@ -1592,6 +1632,9 @@ void audioGearGUI(u8* _gearData){
 			break;
 		}
 		noteUIControls();
+		if (lastSDLPressedKey!=SDLK_UNKNOWN){
+			noteHotkeyCheck();
+		}
 		controlsEnd();
 		startDrawing();
 		drawSong(_fakedMapArray,AUDIOGEARSPACE,visiblePageHeight,0,songYOffset);
@@ -1850,31 +1893,8 @@ int main(int argc, char *argv[]){
 		}
 		noteUIControls();
 		if (lastSDLPressedKey!=SDLK_UNKNOWN){
-			char _foundFriend=0;
-			int i;
-			for (i=0;i<totalNotes;++i){
-				if (noteHotkeys[i]==lastSDLPressedKey){
-					// noteUIOrder
-					int j;
-					for (j=0;j<totalNotes;++j){
-						if (noteUIOrder[j]==i){
-							uiNoteIndex=j;
-							_foundFriend=1;
-							break;
-						}
-					}
-					break;
-				}
-			}
-			if (!_foundFriend){
-				for (i=0;i<totalUI;++i){
-					if (uiHotkeys[i]==lastSDLPressedKey){
-						controlsEnd();
-						myUIBar[i].activateFunc();
-						controlLoop();
-						break;
-					}
-				}
+			if (!noteHotkeyCheck()){
+				uiHotkeyCheck();
 			}
 		}
 		controlsEnd();
