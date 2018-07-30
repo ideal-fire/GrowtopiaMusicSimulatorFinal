@@ -8,13 +8,13 @@ This code is free software.
 https://forums.libsdl.org/viewtopic.php?p=15228
 
 todo - Add saving
-todo - Add loading for mobile devices
-	Apparently, SDL_StartTextInput will bring up an actual keyboard for mobile devices.
 todo - add optional update checker
 	Don't do with libGeneralGood
 		Should I use libCurl or SDL_Net?
 todo - Add icon to the exe
 	todo - Redo some of the more ugly icons, like BPM
+
+SDL_SetClipboardText
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -81,6 +81,10 @@ u8 optionPlayOnPlace=1;
 u8 optionZeroBasedPosition=0;
 u8 optionDoFancyPage=1;
 u8 optionDoCenterPlay=0;
+////////////////////////////////////////////////
+// From libGeneralGood
+extern int _generalGoodRealScreenWidth;
+extern int _generalGoodRealScreenHeight;
 ////////////////////////////////////////////////
 int screenWidth;
 int screenHeight;
@@ -285,7 +289,7 @@ int touchYToBlock(int _passedTouchY){
 
 char isBigEndian(){
 	volatile u32 i=0x01234567;
-    return !((*((u8*)(&i))) == 0x67);
+	return !((*((u8*)(&i))) == 0x67);
 }
 
 s16 fixShort(s16 _passedShort){
@@ -321,18 +325,96 @@ void clearSong(){
 	}
 }
 
-// This function returns malloc'd string or NULL
-char* selectLoadFile(){
+char* sharedFilePicker(char _isSaveDialog, char* _filterList){
 	#ifdef NO_FANCY_DIALOG
-		printf("Input path:\n");
-		char* _readLine=NULL;
-		size_t _readLineBufferSize = 0;
-		getline(&_readLine,&_readLineBufferSize,stdin);
-		removeNewline(_readLine);
-		return _readLine;
+		#ifdef MANUALPATHENTRY
+			printf("Input path:\n");
+			char* _readLine=NULL;
+			size_t _readLineBufferSize = 0;
+			getline(&_readLine,&_readLineBufferSize,stdin);
+			removeNewline(_readLine);
+			return _readLine;
+		#else // Input for mobile
+			controlLoop();
+			char* _userInput = calloc(1,pageWidth*2+1);
+			char _isDone=0;
+			SDL_StartTextInput();
+			while (!_isDone){
+				SDL_Event event;
+				if (SDL_PollEvent(&event)) {
+					switch (event.type) {
+						case SDL_QUIT:
+							XOutFunction();
+							break;
+						case SDL_TEXTINPUT:
+							if (_userInput!=NULL){
+								// Skip some invalid characters
+								if (event.text.text[0]==' ' || event.text.text[0]=='/' || event.text.text[0]=='?' || event.text.text[0]=='%' || event.text.text[0]=='*' || event.text.text[0]==':' || event.text.text[0]=='|' || event.text.text[0]=='\"' || event.text.text[0]=='<' || event.text.text[0]=='>'){
+									break;
+								}
+								// Add character the user typed as long as it's not going to overflow
+								if (strlen(_userInput)<pageWidth*2){
+									strcat(_userInput, event.text.text);
+								}
+							}
+							break;
+						case SDL_KEYDOWN:
+							if (_userInput!=NULL){
+								if (event.key.keysym.sym == SDLK_BACKSPACE){
+									if (strlen(_userInput)>0){
+										_userInput[strlen(_userInput)-1]='\0';
+									}
+								}else if (event.key.keysym.sym == SDLK_KP_ENTER || event.key.keysym.sym==SDLK_RETURN){
+									_isDone=1;
+								}else if (event.key.keysym.sym == SDLK_ESCAPE){
+									free(_userInput);
+									_userInput=NULL;
+									_isDone=1;
+								}
+							}
+							break;
+						case SDL_FINGERDOWN:
+							;
+							int _foundY = event.tfinger.y * _generalGoodRealScreenHeight;
+							if(_foundY<singleBlockSize){
+								_isDone=1;
+							}else if  (_foundY<singleBlockSize*2){
+								free(_userInput);
+								_userInput=NULL;
+								_isDone=1;
+							}
+							break;
+					}
+				}
+
+				startDrawing();
+				drawRectangle(0,0,logicalScreenWidth,singleBlockSize,0,255,0,255);
+					drawString("Done",0,CONSTCHARW/2);
+				drawRectangle(0,singleBlockSize,logicalScreenWidth,singleBlockSize,255,0,0,255);
+					drawString("Cancel",0,CONSTCHARW/2+singleBlockSize);
+				drawRectangle(0,singleBlockSize*2,logicalScreenWidth,singleBlockSize,255,255,255,255);
+					drawString(_userInput,0,CONSTCHARW/2+singleBlockSize*2);
+				endDrawing();
+			}
+			SDL_StopTextInput();
+
+			controlsResetEmpty(); // Because we didn't catch the finger up or anything
+			if (_userInput!=NULL){
+				char* _completeFilepath = getDataFilePath(_userInput);
+				free(_userInput);
+				return _completeFilepath;
+			}else{
+				return NULL;
+			}
+		#endif
 	#else
 		nfdchar_t *outPath = NULL;
-		nfdresult_t result = NFD_OpenDialog( "GMSF,gtmusic,AngryLegGuy,mylegguy", NULL, &outPath );
+		nfdresult_t result;
+		if (_isSaveDialog){
+			result = NFD_SaveDialog( "GMSF,gtmusic,AngryLegGuy,mylegguy", NULL, &outPath );
+		}else{
+			result = NFD_OpenDialog( "GMSF,gtmusic,AngryLegGuy,mylegguy", NULL, &outPath );
+		}
 		if (result == NFD_OKAY){
 			return outPath;
 		}else if ( result == NFD_CANCEL ){
@@ -343,6 +425,16 @@ char* selectLoadFile(){
 		}
 	#endif
 }
+
+// This function returns malloc'd string or NULL
+char* selectLoadFile(){
+	return sharedFilePicker(0,"GMSF,gtmusic,AngryLegGuy,mylegguy");
+}
+
+char* selectSaveFile(){
+	return sharedFilePicker(1,"GMSF,gtmusic,AngryLegGuy,mylegguy");
+}
+
 void findMaxX(){
 	maxX=0;
 	int i,j;
@@ -1346,16 +1438,12 @@ int L_selectFile(lua_State* passedState){
 		printf("Unsupported.\n");
 		return 0;
 	#else
-		nfdchar_t *outPath = NULL;
-		nfdresult_t result = NFD_OpenDialog( lua_tostring(passedState,1), NULL, &outPath );
-		if (result == NFD_OKAY){
-			lua_pushstring(passedState,outPath);
-			free(outPath);
+		char* _gottenString = sharedFilePicker(0,lua_tostring(passedState,1));
+		if (_gottenString!=NULL){
+			lua_pushstring(passedState,_gottenString);
+			free(_gottenString);
 			return 1;
-		}else if ( result == NFD_CANCEL ){
-			return 0;
 		}else{
-			printf("Error: %s\n", NFD_GetError() );
 			return 0;
 		}
 	#endif
