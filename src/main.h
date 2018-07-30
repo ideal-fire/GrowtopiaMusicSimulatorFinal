@@ -1,5 +1,6 @@
 // Always add elements right before U_RESERVED, otherwise saved hotkey config breaks.
 enum uiID{
+	U_NOTUNIQUE,
 	U_SELICON,
 	U_PLAY,
 	U_SAVE,

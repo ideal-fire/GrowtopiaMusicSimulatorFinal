@@ -2,12 +2,12 @@
 /////////////////////////////////////////////////////////////////////////////
 This code is free software.
 	Not "free" as in "lol, here's a 20 page license file even I've never read. if you modify my code, your code now belongs to the 20 page license file too. dont even think about using this code in a way that doesnt align with my ideology. its freedom, I promise"
+		Note: CC0 is not 20 pages and can be summarized in 3 words.
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code because i worked hard" For actual license, see LICENSE file.
 /////////////////////////////////////////////////////////////////////////////
 https://forums.libsdl.org/viewtopic.php?p=15228
 
 todo - Add saving
-todo - Add settings saving, including hotkey config saving
 todo - Add loading for mobile devices
 	Apparently, SDL_StartTextInput will bring up an actual keyboard for mobile devices.
 todo - add optional update checker
@@ -38,6 +38,11 @@ todo - Add icon to the exe
 
 #include "fonthelper.h"
 #include "luaDofileEmbedded.h"
+
+///////////////////////////////////////
+#define SETTINGSVERSION 1
+#define HOTKEYVERSION 1
+///////////////////////////////////////
 
 #define ISTESTINGMOBILE 0
 #define DISABLESOUND 0
@@ -165,8 +170,103 @@ const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c
 
 ////////////////////////////////////////////////
 
-void loadHotkeys(){
+char* getDataFilePath(const char* _passedFilename){
+	char* _fixedPathBuffer = malloc(strlen(_passedFilename)+strlen(getFixPathString(TYPE_DATA))+1);
+	fixPath((char*)_passedFilename,_fixedPathBuffer,TYPE_DATA);
+	return _fixedPathBuffer;
+}
 
+void saveHotkeys(){
+	char* _settingsFilename = getDataFilePath("hotkeys.legSettings");
+	FILE* fp = fopen(_settingsFilename,"w");
+	if (fp!=NULL){
+		u8 _tempHoldVersion = HOTKEYVERSION;
+		fwrite(&_tempHoldVersion,sizeof(u8),1,fp);
+
+		int i;
+		fwrite(&totalNotes,sizeof(u16),1,fp);
+		for (i=0;i<totalNotes;++i){
+			fwrite(&(noteHotkeys[i]),sizeof(SDL_Keycode),1,fp);
+		}
+		fwrite(&totalUI,sizeof(u16),1,fp);
+		for (i=0;i<totalUI;++i){
+			fwrite(&(myUIBar[i].uniqueId),sizeof(u8),1,fp);
+			fwrite(&(uiHotkeys[i]),sizeof(SDL_Keycode),1,fp);
+		}
+		fclose(fp);
+	}else{
+		printf("Could not write hotkey settings file to\n");
+		printf("%s\n",_settingsFilename);
+	}
+	free(_settingsFilename);
+}
+
+void saveSettings(){
+	char* _settingsFilename = getDataFilePath("generalSettings.legSettings");
+	FILE* fp = fopen(_settingsFilename,"w");
+	if (fp!=NULL){
+		u8 _tempHoldVersion = SETTINGSVERSION;
+		fwrite(&_tempHoldVersion,sizeof(u8),1,fp);
+
+		fwrite(&optionPlayOnPlace,sizeof(u8),1,fp);
+		fwrite(&optionZeroBasedPosition,sizeof(u8),1,fp);
+		fwrite(&optionDoFancyPage,sizeof(u8),1,fp);
+		fwrite(&optionDoCenterPlay,sizeof(u8),1,fp);
+		fclose(fp);
+	}else{
+		printf("Could not write settings file to\n");
+		printf("%s\n",_settingsFilename);
+	}
+	free(_settingsFilename);
+}
+
+void loadSettings(){
+	char* _settingsFilename = getDataFilePath("generalSettings.legSettings");
+	FILE* fp = fopen(_settingsFilename,"r");
+	if (fp!=NULL){
+		u8 _tempHoldVersion = SETTINGSVERSION;
+		fread(&_tempHoldVersion,sizeof(u8),1,fp);
+		if (_tempHoldVersion>=1){
+			fread(&optionPlayOnPlace,sizeof(u8),1,fp);
+			fread(&optionZeroBasedPosition,sizeof(u8),1,fp);
+			fread(&optionDoFancyPage,sizeof(u8),1,fp);
+			fread(&optionDoCenterPlay,sizeof(u8),1,fp);
+		}
+		fclose(fp);
+	}
+	free(_settingsFilename);
+}
+
+void loadHotkeys(){
+	char* _settingsFilename = getDataFilePath("hotkeys.legSettings");
+	FILE* fp = fopen(_settingsFilename,"r");
+	if (fp!=NULL){
+		u8 _tempReadVersion = HOTKEYVERSION;
+		fread(&_tempReadVersion,sizeof(u8),1,fp);
+		if (_tempReadVersion>=1){
+			int i;
+			fread(&totalNotes,sizeof(u16),1,fp);
+			for (i=0;i<totalNotes;++i){
+				fread(&(noteHotkeys[i]),sizeof(SDL_Keycode),1,fp);
+			}
+			fread(&totalUI,sizeof(u16),1,fp);
+			for (i=0;i<totalUI;++i){
+				u8 _lastLoadedID;
+				fread(&(_lastLoadedID),sizeof(u8),1,fp);
+				if (_lastLoadedID!=U_NOTUNIQUE){
+					int j;
+					for (j=0;j<totalUI;++j){
+						if (myUIBar[j].uniqueId==_lastLoadedID){
+							fread(&(uiHotkeys[j]),sizeof(SDL_Keycode),1,fp);
+							break;
+						}
+					}
+				}
+			}
+		}
+		fclose(fp);
+	}
+	free(_settingsFilename);
 }
 
 u8 getUINoteID(){
@@ -221,7 +321,6 @@ void clearSong(){
 	}
 }
 
-// TODO - For mobile I can make this function use the number input system
 // This function returns malloc'd string or NULL
 char* selectLoadFile(){
 	#ifdef NO_FANCY_DIALOG
@@ -724,8 +823,8 @@ void uiKeyConf(){
 		}
 
 		endDrawing();
-
 	}
+	saveHotkeys();
 }
 
 void uiUIScroll(){
@@ -796,6 +895,8 @@ void uiSettings(){
 	}
 	setSongXOffset(songXOffset);
 	controlLoop();
+	//
+	saveSettings();
 }
 
 void uiResizeSong(){
@@ -953,7 +1054,7 @@ uiElement* addUI(){
 	++totalUI;
 	myUIBar = realloc(myUIBar,sizeof(uiElement)*totalUI);
 	uiHotkeys = recalloc(uiHotkeys,sizeof(SDL_Keycode)*(totalUI-1),sizeof(SDL_Keycode)*totalUI);
-	myUIBar[totalUI-1].uniqueId=-1;
+	myUIBar[totalUI-1].uniqueId=U_NOTUNIQUE;
 	return &(myUIBar[totalUI-1]);
 }
 
@@ -1769,22 +1870,22 @@ void init(){
 	_newButton = addUI();
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/resizeButton.png");
 	_newButton->activateFunc = uiResizeSong;
-		//_newButton->uniqueId = U_SIZE;
+	_newButton->uniqueId = U_SIZE;
 	//
 	_newButton = addUI();
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/settingsButton.png");
 	_newButton->activateFunc = uiSettings;
-		//_newButton->uniqueId = U_SETTINGS;
+	_newButton->uniqueId = U_SETTINGS;
 	//
 	_newButton = addUI();
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/countButton.png");
 	_newButton->activateFunc = uiCount;
-		//_newButton->uniqueId = U_COUNT;
+	_newButton->uniqueId = U_COUNT;
 	//
 	_newButton = addUI();
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/creditsButton.png");
 	_newButton->activateFunc = uiCredits;
-		//_newButton->uniqueId = U_CREDITS;
+	_newButton->uniqueId = U_CREDITS;
 	//
 	_newButton = addUI();
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/loadButton.png");
@@ -1835,8 +1936,9 @@ void init(){
 
 	makeDataDirectory();
 
+	loadSettings();
 	// Load hotkey config here because all UI and notes should be added by now.
-		// TODO
+	loadHotkeys();
 
 	// Hopefully we've added some note images in the init.lua.
 	updateNoteIcon();
