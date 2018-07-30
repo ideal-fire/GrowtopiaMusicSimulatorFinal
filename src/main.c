@@ -74,6 +74,8 @@ SDL_SetClipboardText
 
 #define AUDIOGEARSPACE 5
 
+#define BONUSENDCHARACTER 1 // char value to signal the true end of the message text in easyMessage
+
 ////////////////////////////////////////////////
 #include "main.h"
 ////////////////////////////////////////////////
@@ -173,6 +175,90 @@ int uiUIScrollIndex=-1;
 const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c'};
 
 ////////////////////////////////////////////////
+// Code stolen from Happy Land.
+// Displays whatever message you want. Text will wrap.
+void easyMessage(char* _newMessage){
+	char* currentTextboxMessage = malloc(strlen(_newMessage)+2);
+	strcpy(currentTextboxMessage,_newMessage);
+	uint32_t _cachedMessageLength = strlen(currentTextboxMessage);
+
+	currentTextboxMessage[_cachedMessageLength+1] = BONUSENDCHARACTER;
+
+	uint32_t i;
+	uint32_t j;
+	// This will loop through the entire message, looking for where I need to add new lines. When it finds a spot that
+	// needs a new line, that spot in the message will become 0.
+	int _lastNewlinePosition=-1; // If this doesn't start at -1, the first character will be cut off
+	for (i = 0; i < _cachedMessageLength; i++){
+		if (currentTextboxMessage[i]==32){ // Only check when we meet a space. 32 is a space in ASCII
+			currentTextboxMessage[i]='\0';
+			if (bitmpTextWidth(&(currentTextboxMessage[_lastNewlinePosition+1]))>pageWidth*CONSTCHARW){
+				uint8_t _didWork=0;
+				for (j=i-1;j>_lastNewlinePosition+1;j--){
+					//printf("J:%d\n",j);
+					if (currentTextboxMessage[j]==32){
+						currentTextboxMessage[j]='\0';
+						_didWork=1;
+						currentTextboxMessage[i]=32;
+						_lastNewlinePosition=j;
+						break;
+					}
+				}
+				if (_didWork==0){
+					currentTextboxMessage[i]='\0';
+					_lastNewlinePosition=i+1;
+				}
+			}else{
+				currentTextboxMessage[i]=32;
+			}
+		}
+	}
+	// This code will make a new line if there needs to be one because of the last word
+	if (bitmpTextWidth(&(currentTextboxMessage[_lastNewlinePosition+1]))>pageWidth*CONSTCHARW){
+		for (j=_cachedMessageLength-1;j>_lastNewlinePosition+1;j--){
+			if (currentTextboxMessage[j]==32){
+				currentTextboxMessage[j]='\0';
+				break;
+			}
+		}
+	}
+
+
+	while(1){
+		controlsStart();
+		controlsEnd();
+		startDrawing();
+		int i;
+		int _currentDrawPosition=0;
+		for (i=0;;++i){
+
+			printf("%s\n",&(currentTextboxMessage[_currentDrawPosition]));
+			drawString(&(currentTextboxMessage[_currentDrawPosition]),0,i*singleBlockSize);
+			_currentDrawPosition+=strlen(&(currentTextboxMessage[_currentDrawPosition]));
+			printf("%d\n",_currentDrawPosition);
+			if (currentTextboxMessage[_currentDrawPosition+1]==BONUSENDCHARACTER){
+				break;
+			}else{
+				_currentDrawPosition++;
+			}
+		}
+		endDrawing();
+	}
+
+	free(currentTextboxMessage);
+}
+
+/*void laziestMessage(char* _myMessage){
+	int _totalLines=ceil(strlen(_myMessage)/(pageWidth*2));
+	char _duplicateMessage[strlen(_myMessage)+_totalLines];
+	strcpy(_duplicateMessage,_myMessage);
+
+	int i;
+	for (i=1;i<_totalLines;++i){
+		int _bytesToMove = strlen(_myMessage[])
+		memmove()
+	}
+}*/
 
 char* getDataFilePath(const char* _passedFilename){
 	char* _fixedPathBuffer = malloc(strlen(_passedFilename)+strlen(getFixPathString(TYPE_DATA))+1);
@@ -325,7 +411,7 @@ void clearSong(){
 	}
 }
 
-char* sharedFilePicker(char _isSaveDialog, char* _filterList){
+char* sharedFilePicker(char _isSaveDialog, const char* _filterList){
 	#ifdef NO_FANCY_DIALOG
 		#ifdef MANUALPATHENTRY
 			printf("Input path:\n");
@@ -747,10 +833,25 @@ void playAtPosition(s32 _startPosition){
 	}
 }
 
+void saveSong(char* _passedFilename){
+	FILE* fp = fopen(_passedFilename,"w");
+	if (fp!=NULL){
+
+		fclose(fp);
+	}else{
+
+	}
+	return;
+}
+
 #include "songLoaders.h"
 
 void uiSave(){
-	printf("TODO - Saving.\n");
+	char* _chosenFile = selectSaveFile();
+	if (_chosenFile!=NULL){
+		saveSong(_chosenFile);
+	}
+	free(_chosenFile);
 }
 
 void uiLoad(){
@@ -2030,6 +2131,8 @@ void init(){
 
 	// Hopefully we've added some note images in the init.lua.
 	updateNoteIcon();
+
+	easyMessage("The FitnessGram Pacer Test is a multistage aerobic capacity test that progressively gets more difficult as it continues. The 20 meter pacer test will begin in 30 seconds. Line up at the start. The running speed starts slowly, but gets faster each minute after you hear this signal. [beep] A single lap should be completed each time you hear this sound. [ding] Remember to run in a straight line, and run as long as possible. The second time you fail to complete a lap before the sound, your test is over. The test will begin on the word start. On your mark, get ready, start.");
 }
 int main(int argc, char *argv[]){
 	printf("Loading...\n");
