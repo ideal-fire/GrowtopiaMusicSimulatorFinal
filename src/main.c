@@ -1403,6 +1403,16 @@ void XOutFunction(){
 						_isDone=1;
 					}
 				}
+				if (wasJustPressed(SCE_TOUCH)){
+					int _fixedTouchY = touchY-globalDrawYOffset;
+					int _fixedTouchX = touchX-globalDrawXOffset;
+					if (_fixedTouchY>singleBlockSize*2){
+						_isDone=1;
+						if (_fixedTouchX>logicalScreenWidth/2){
+							_shouldExit=0;
+						}
+					}
+				}
 				controlsEnd();
 				startDrawing();
 				drawString("Really exit?",logicalScreenWidth/2-CONSTCHARW*(strlen("Really exit?")/2),CONSTCHARW/2);
@@ -1418,6 +1428,15 @@ void XOutFunction(){
 	if (_shouldExit){
 		printf("Exit\n");
 		exit(0);
+	}else{
+		// Wait for tap to end so we don't place stuff on song by mistake
+		while (1){
+			controlsStart();
+			if (!isDown(SCE_TOUCH)){
+				break;
+			}
+			controlsEnd();
+		}
 	}
 }
 
