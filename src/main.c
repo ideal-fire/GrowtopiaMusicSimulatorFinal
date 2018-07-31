@@ -7,7 +7,6 @@ This code is free software.
 /////////////////////////////////////////////////////////////////////////////
 https://forums.libsdl.org/viewtopic.php?p=15228
 
-todo - Add saving
 todo - add optional update checker
 	Don't do with libGeneralGood
 		Should I use libCurl or SDL_Net?
@@ -88,6 +87,8 @@ u8 optionPlayOnPlace=1;
 u8 optionZeroBasedPosition=0;
 u8 optionDoFancyPage=1;
 u8 optionDoCenterPlay=0;
+u8 optionExitConfirmation=1;
+u8 optionDoubleXAllowsExit=0; // If clicking the X button twice lets you exit even with the confirmation prompt up
 ////////////////////////////////////////////////
 // From libGeneralGood
 extern int _generalGoodRealScreenWidth;
@@ -310,6 +311,8 @@ void saveSettings(){
 		fwrite(&optionZeroBasedPosition,sizeof(u8),1,fp);
 		fwrite(&optionDoFancyPage,sizeof(u8),1,fp);
 		fwrite(&optionDoCenterPlay,sizeof(u8),1,fp);
+		fwrite(&optionExitConfirmation,sizeof(u8),1,fp);
+		fwrite(&optionDoubleXAllowsExit,sizeof(u8),1,fp);
 		fclose(fp);
 	}else{
 		printf("Could not write settings file to\n");
@@ -329,6 +332,8 @@ void loadSettings(){
 			fread(&optionZeroBasedPosition,sizeof(u8),1,fp);
 			fread(&optionDoFancyPage,sizeof(u8),1,fp);
 			fread(&optionDoCenterPlay,sizeof(u8),1,fp);
+			fread(&optionExitConfirmation,sizeof(u8),1,fp);
+			fread(&optionDoubleXAllowsExit,sizeof(u8),1,fp);
 		}
 		fclose(fp);
 	}
@@ -1107,6 +1112,11 @@ void uiCredits(){
 void uiSettings(){
 	controlLoop(); // Because we're coming from the middle of a control loop.
 	u8 _totalSettings=4;
+
+	if (!isMobile){
+		_totalSettings+=2;
+	}
+
 	char* _settingsText[_totalSettings];
 	u8* _settingsValues[_totalSettings];
 
@@ -1118,6 +1128,13 @@ void uiSettings(){
 		_settingsValues[2]=&optionDoFancyPage;
 	_settingsText[3]="Centered play bar";
 		_settingsValues[3]=&optionDoCenterPlay;
+
+	if (!isMobile){
+		_settingsText[_totalSettings-2]="Exit confirmation";
+			_settingsValues[_totalSettings-2]=&optionExitConfirmation;
+		_settingsText[_totalSettings-1]="Double X allows confirmation override";
+			_settingsValues[_totalSettings-1]=&optionDoubleXAllowsExit;
+	}
 
 	while (1){
 		controlsStart();
@@ -1364,8 +1381,44 @@ void drawString(const char* _passedString, int _x, int _y){
 	_drawString(_passedString,_x,_y,generalScale,CONSTCHARW);
 }
 
+char _inExitConfirmation=0;
 void XOutFunction(){
-	exit(0);
+	char _shouldExit=1;
+	if (!isMobile && optionExitConfirmation){
+		if (_inExitConfirmation){
+			if (!optionDoubleXAllowsExit){
+				_shouldExit=0;
+			}
+		}else{
+			char _isDone=0;
+			int _optionsDrawY = (logicalScreenHeight - CONSTCHARW*2)/2-(CONSTCHARW/2);
+			_inExitConfirmation=1;
+			while(!_isDone){
+				controlsStart();
+				if (lastSDLPressedKey!=SDLK_UNKNOWN){
+					if (lastSDLPressedKey==SDLK_ESCAPE){
+						_shouldExit=0;
+						_isDone=1;
+					}else if (lastSDLPressedKey==SDLK_RETURN || lastSDLPressedKey==SDLK_KP_ENTER){
+						_isDone=1;
+					}
+				}
+				controlsEnd();
+				startDrawing();
+				drawString("Really exit?",logicalScreenWidth/2-CONSTCHARW*(strlen("Really exit?")/2),CONSTCHARW/2);
+				drawRectangle(logicalScreenWidth/4-CONSTCHARW*3,_optionsDrawY-CONSTCHARW,CONSTCHARW*6,CONSTCHARW*3,255,53,53,255);
+				drawString("Exit",logicalScreenWidth/4-CONSTCHARW*2,_optionsDrawY);
+				drawRectangle(logicalScreenWidth/2+logicalScreenWidth/4-CONSTCHARW*3,_optionsDrawY-CONSTCHARW,CONSTCHARW*7,CONSTCHARW*3,100,255,100,255);
+				drawString("Don't",logicalScreenWidth/2+logicalScreenWidth/4-CONSTCHARW*2,_optionsDrawY);
+				endDrawing();
+			}
+			_inExitConfirmation=0;
+		}
+	}
+	if (_shouldExit){
+		printf("Exit\n");
+		exit(0);
+	}
 }
 
 void setTotalNotes(u16 _newTotal){
