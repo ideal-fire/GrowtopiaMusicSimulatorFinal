@@ -12,8 +12,6 @@ todo - add optional update checker
 		Should I use libCurl or SDL_Net?
 todo - Add icon to the exe
 	todo - Redo some of the more ugly icons, like BPM
-
-SDL_SetClipboardText
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +25,10 @@ SDL_SetClipboardText
 #include <GeneralGoodSound.h>
 #include <GeneralGoodImages.h>
 
+#ifndef DISABLEUPDATECHECKS
+	#include <SDL2/SDL_net.h>
+#endif
+
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
@@ -39,6 +41,9 @@ SDL_SetClipboardText
 #include "luaDofileEmbedded.h"
 
 ///////////////////////////////////////
+#define VERSIONNUMBER 1
+#define VERSIONSTRING "v1.0"
+//////////////////
 #define APPLICATIONVERSION 1
 #define SETTINGSVERSION 1
 #define HOTKEYVERSION 1
@@ -80,6 +85,10 @@ SDL_SetClipboardText
 #define SAVEENDMARKER "FSMG"
 #define SAVEFORMATMAGIC "GMSF"
 
+#define UPDATEPASTE "E8h4z5yv"
+
+#define HUMANDOWNLOADPAGE "https://github.com/MyLegGuy/GrowtopiaMusicSimulatorFinal/releases"
+
 ////////////////////////////////////////////////
 #include "main.h"
 ////////////////////////////////////////////////
@@ -89,6 +98,7 @@ u8 optionDoFancyPage=1;
 u8 optionDoCenterPlay=0;
 u8 optionExitConfirmation=1;
 u8 optionDoubleXAllowsExit=0; // If clicking the X button twice lets you exit even with the confirmation prompt up
+u8 optionUpdateCheck=1;
 ////////////////////////////////////////////////
 // From libGeneralGood
 extern int _generalGoodRealScreenWidth;
@@ -313,6 +323,8 @@ void saveSettings(){
 		fwrite(&optionDoCenterPlay,sizeof(u8),1,fp);
 		fwrite(&optionExitConfirmation,sizeof(u8),1,fp);
 		fwrite(&optionDoubleXAllowsExit,sizeof(u8),1,fp);
+		fwrite(&optionUpdateCheck,sizeof(u8),1,fp);
+
 		fclose(fp);
 	}else{
 		printf("Could not write settings file to\n");
@@ -334,6 +346,7 @@ void loadSettings(){
 			fread(&optionDoCenterPlay,sizeof(u8),1,fp);
 			fread(&optionExitConfirmation,sizeof(u8),1,fp);
 			fread(&optionDoubleXAllowsExit,sizeof(u8),1,fp);
+			fread(&optionUpdateCheck,sizeof(u8),1,fp);
 		}
 		fclose(fp);
 	}
@@ -1105,14 +1118,18 @@ void uiCredits(){
 		drawString("HonestyCow - Sound matching",0,CONSTCHARW);
 		drawString("D.RS - Theme",0,CONSTCHARW*2);
 		drawString("Bonk - BPM Forumla",0,CONSTCHARW*3);
+		drawString(VERSIONSTRING,0,CONSTCHARW*5);
+		drawString(__DATE__,0,CONSTCHARW*6);
+		drawString(__TIME__,0,CONSTCHARW*7);
 		endDrawing();
 	}
 }
 
 void uiSettings(){
 	controlLoop(); // Because we're coming from the middle of a control loop.
-	u8 _totalSettings=4;
+	u8 _totalSettings=5;
 
+	// No exit confirmations on mobile, so no need for those settings
 	if (!isMobile){
 		_totalSettings+=2;
 	}
@@ -1128,6 +1145,8 @@ void uiSettings(){
 		_settingsValues[2]=&optionDoFancyPage;
 	_settingsText[3]="Centered play bar";
 		_settingsValues[3]=&optionDoCenterPlay;
+	_settingsText[4]="Check for updates";
+		_settingsValues[4]=&optionUpdateCheck;
 
 	if (!isMobile){
 		_settingsText[_totalSettings-2]="Exit confirmation";
@@ -1381,6 +1400,52 @@ void drawString(const char* _passedString, int _x, int _y){
 	_drawString(_passedString,_x,_y,generalScale,CONSTCHARW);
 }
 
+// Returns....
+// 0 for red choice
+// 1 for pressing esc
+// 2 for green choice
+// 3 for pressing enter
+char easyChoice(char* _title, char* _redChoice, char* _greenChoice){
+	char _isDone=0;
+	char _returnValue=0;
+	int _optionsDrawY = (logicalScreenHeight - CONSTCHARW*2)/2-(CONSTCHARW/2);
+	while(!_isDone){
+		controlsStart();
+		if (lastSDLPressedKey!=SDLK_UNKNOWN){
+			if (lastSDLPressedKey==SDLK_ESCAPE){
+				_isDone=1;
+				_returnValue=1;
+			}else if (lastSDLPressedKey==SDLK_RETURN || lastSDLPressedKey==SDLK_KP_ENTER){
+				_isDone=1;
+				_returnValue=3;
+			}
+		}
+		if (wasJustPressed(SCE_TOUCH)){
+			int _fixedTouchY = touchY-globalDrawYOffset;
+			int _fixedTouchX = touchX-globalDrawXOffset;
+			if (_fixedTouchY>singleBlockSize*2){
+				_isDone=1;
+				if (_fixedTouchX>logicalScreenWidth/2){ // If we pressed the green choice
+					_returnValue=2;
+				}else{ // If we pressed the red choice
+					_returnValue=0;
+				}
+			}
+		}
+		controlsEnd();
+		startDrawing();
+		drawString(_title,logicalScreenWidth/2-CONSTCHARW*(strlen(_title)/2),CONSTCHARW/2);
+
+		drawRectangle(logicalScreenWidth/4-CONSTCHARW*(strlen(_redChoice)/2+1),_optionsDrawY-CONSTCHARW,CONSTCHARW*(strlen(_redChoice)+2),CONSTCHARW*3,255,53,53,255);
+		drawString(_redChoice,logicalScreenWidth/4-CONSTCHARW*(strlen(_redChoice)/2),_optionsDrawY);
+		
+		drawRectangle(logicalScreenWidth/2+logicalScreenWidth/4-CONSTCHARW*(strlen(_greenChoice)/2+1),_optionsDrawY-CONSTCHARW,CONSTCHARW*(strlen(_greenChoice)+2),CONSTCHARW*3,100,255,100,255);
+		drawString(_greenChoice,logicalScreenWidth/2+logicalScreenWidth/4-CONSTCHARW*(strlen(_greenChoice)/2),_optionsDrawY);
+		endDrawing();
+	}
+	return _returnValue;
+}
+
 char _inExitConfirmation=0;
 void XOutFunction(){
 	char _shouldExit=1;
@@ -1390,38 +1455,14 @@ void XOutFunction(){
 				_shouldExit=0;
 			}
 		}else{
-			char _isDone=0;
-			int _optionsDrawY = (logicalScreenHeight - CONSTCHARW*2)/2-(CONSTCHARW/2);
 			_inExitConfirmation=1;
-			while(!_isDone){
-				controlsStart();
-				if (lastSDLPressedKey!=SDLK_UNKNOWN){
-					if (lastSDLPressedKey==SDLK_ESCAPE){
-						_shouldExit=0;
-						_isDone=1;
-					}else if (lastSDLPressedKey==SDLK_RETURN || lastSDLPressedKey==SDLK_KP_ENTER){
-						_isDone=1;
-					}
-				}
-				if (wasJustPressed(SCE_TOUCH)){
-					int _fixedTouchY = touchY-globalDrawYOffset;
-					int _fixedTouchX = touchX-globalDrawXOffset;
-					if (_fixedTouchY>singleBlockSize*2){
-						_isDone=1;
-						if (_fixedTouchX>logicalScreenWidth/2){
-							_shouldExit=0;
-						}
-					}
-				}
-				controlsEnd();
-				startDrawing();
-				drawString("Really exit?",logicalScreenWidth/2-CONSTCHARW*(strlen("Really exit?")/2),CONSTCHARW/2);
-				drawRectangle(logicalScreenWidth/4-CONSTCHARW*3,_optionsDrawY-CONSTCHARW,CONSTCHARW*6,CONSTCHARW*3,255,53,53,255);
-				drawString("Exit",logicalScreenWidth/4-CONSTCHARW*2,_optionsDrawY);
-				drawRectangle(logicalScreenWidth/2+logicalScreenWidth/4-CONSTCHARW*3,_optionsDrawY-CONSTCHARW,CONSTCHARW*7,CONSTCHARW*3,100,255,100,255);
-				drawString("Don't",logicalScreenWidth/2+logicalScreenWidth/4-CONSTCHARW*2,_optionsDrawY);
-				endDrawing();
+
+			char _choiceResult = easyChoice("Really exit?","Exit","Don't");
+			// Click red choice or press enter
+			if (_choiceResult==1 || _choiceResult==2){
+				_shouldExit=0;
 			}
+
 			_inExitConfirmation=0;
 		}
 	}
@@ -2088,10 +2129,93 @@ void audioGearGUI(u8* _gearData){
 	}
 	free(_fakedMapArray);
 }
+
+char updateAvailable(){
+	#ifdef DISABLEUPDATECHECKS
+		return 0;
+	#else
+		// Make sure updates are not disabled. Do not combine this check with the one above, this code should be able to be compiled without SDLNet
+		if (!optionUpdateCheck){
+			return 0;
+		}
+
+		char _updateAvalible=0;
+		SDLNet_Init();
+		IPaddress _pastebinIp;
+		if (SDLNet_ResolveHost(&_pastebinIp,"pastebin.com",80)==-1){
+			printf("Could not resolve host.\n");
+		}else{
+			TCPsocket _pastebinConnection = SDLNet_TCP_Open(&_pastebinIp);
+			char _webInfoBuffer[1024];
+		
+			strcpy(_webInfoBuffer,"GET /raw/");
+			strcat(_webInfoBuffer,UPDATEPASTE);
+			strcat(_webInfoBuffer," HTTP/1.1\r\n");
+			strcat(_webInfoBuffer,"Host: pastebin.com\r\n");
+			strcat(_webInfoBuffer,"\r\n");
+			
+			SDLNet_TCP_Send(_pastebinConnection, (void*)_webInfoBuffer, strlen(_webInfoBuffer));
+			// Receive data and null terminate it
+			_webInfoBuffer[SDLNet_TCP_Recv(_pastebinConnection, (void*)_webInfoBuffer, sizeof(_webInfoBuffer))]='\0';
+			/*
+			Example response:
+			////////////////////////////////////////
+			HTTP/1.1 200 OK
+			Date: Tue, 31 Jul 2018 06:34:56 GMT
+			Content-Type: text/plain; charset=utf-8
+			Transfer-Encoding: chunked
+			Connection: keep-alive
+			Set-Cookie: __cfduid=da302977d5186148c8fbd1578cd2131bc1533018896; expires=Wed, 31-Jul-19 06:34:56 GMT; path=/; domain=.pastebin.com; HttpOnly
+			Cache-Control: public, max-age=1801
+			Vary: Accept-Encoding
+			X-XSS-Protection: 1; mode=block
+			CF-Cache-Status: HIT
+			Expires: Tue, 31 Jul 2018 07:04:57 GMT
+			Server: cloudflare
+			CF-RAY: 442e0aca164c5753-IAD
+			
+			1
+			2
+
+			////////////////////////////////////////
+			The second to last line is the length of the data
+			The last line is the actual data. The last line also has a newline character at the end of it.
+			*/
+
+			// Parse gotten data
+			removeNewline(_webInfoBuffer);
+
+			int _foundNewline=-1;
+			int i;
+			for (i=strlen(_webInfoBuffer)-2;i>=0;--i){
+				if (_webInfoBuffer[i]==0x0A){
+					_foundNewline=i+1; // Start in front of the new line
+					break;
+				}
+			}
+			if (_foundNewline!=-1){
+				char _realDataBuffer[strlen(&(_webInfoBuffer[_foundNewline]))+1];
+				strcpy(_realDataBuffer,&(_webInfoBuffer[_foundNewline]));
+				printf("Web version: %s\n",_realDataBuffer);
+				int _maxWebVersion = atoi(_realDataBuffer);
+				if (_maxWebVersion>VERSIONNUMBER){
+					_updateAvalible=1;
+				}else if (_maxWebVersion==0){
+					printf("Failed to parse web response\n");
+					printf("%s\n",_webInfoBuffer);
+				}
+			}else{
+				printf("Failed to parse web response\n");
+				printf("%s\n",_webInfoBuffer);
+			}
+		}
+		SDLNet_Quit();
+		return _updateAvalible;
+	#endif
+}
+
 void init(){
 	initGraphics(832,480,&screenWidth,&screenHeight);
-	initAudio();
-	Mix_AllocateChannels(14*4); // We need a lot of channels for all these music notes
 	setClearColor(192,192,192,255);
 	if (screenWidth!=832 || screenHeight!=480){
 		isMobile=1;
@@ -2122,8 +2246,12 @@ void init(){
 		visiblePageHeight=15;
 	}
 	visiblePageHeight--; // Leave a space for the toolbar.
-
 	pageWidth = (logicalScreenWidth/singleBlockSize)-1;
+
+	initAudio();
+	Mix_AllocateChannels(14*4); // We need a lot of channels for all these music notes
+
+	makeDataDirectory();
 
 	L = luaL_newstate();
 	luaL_openlibs(L);
@@ -2263,14 +2391,30 @@ void init(){
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
 	goodLuaDofile(L,tempPathFixBuffer);
 
-	makeDataDirectory();
-
 	loadSettings();
 	// Load hotkey config here because all UI and notes should be added by now.
 	loadHotkeys();
 
 	// Hopefully we've added some note images in the init.lua.
 	updateNoteIcon();
+
+	if (checkFileExist("./noupdate")==1){
+		optionUpdateCheck=0;
+	}
+
+	if (updateAvailable()){
+		if (!isMobile){
+			if (easyChoice("Update available, copy URL to clipboard?","No","Yes")>=2){
+				// Actually doesn't work for me.
+				if (SDL_SetClipboardText(HUMANDOWNLOADPAGE)!=0){
+					printf("Failed to set clipboard\n");
+				}
+			}
+		}else{
+			easyMessage("Update available.");
+		}
+	}
+	
 }
 int main(int argc, char *argv[]){
 	printf("Loading...\n");
