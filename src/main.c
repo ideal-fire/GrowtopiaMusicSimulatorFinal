@@ -40,8 +40,10 @@ SDL_SetClipboardText
 #include "luaDofileEmbedded.h"
 
 ///////////////////////////////////////
+#define APPLICATIONVERSION 1
 #define SETTINGSVERSION 1
 #define HOTKEYVERSION 1
+#define SONGFORMATVERSION 1
 ///////////////////////////////////////
 
 #define ISTESTINGMOBILE 0
@@ -75,6 +77,9 @@ SDL_SetClipboardText
 #define AUDIOGEARSPACE 5
 
 #define BONUSENDCHARACTER 1 // char value to signal the true end of the message text in easyMessage
+
+#define SAVEENDMARKER "FSMG"
+#define SAVEFORMATMAGIC "GMSF"
 
 ////////////////////////////////////////////////
 #include "main.h"
@@ -180,10 +185,11 @@ const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c
 void easyMessage(char* _newMessage){
 	char* currentTextboxMessage = malloc(strlen(_newMessage)+2);
 	strcpy(currentTextboxMessage,_newMessage);
+
+	// Step 1 - Put words into buffer with newlines
+	//////////////////////////////////////////////////////////////////
 	uint32_t _cachedMessageLength = strlen(currentTextboxMessage);
-
 	currentTextboxMessage[_cachedMessageLength+1] = BONUSENDCHARACTER;
-
 	uint32_t i;
 	uint32_t j;
 	// This will loop through the entire message, looking for where I need to add new lines. When it finds a spot that
@@ -192,7 +198,7 @@ void easyMessage(char* _newMessage){
 	for (i = 0; i < _cachedMessageLength; i++){
 		if (currentTextboxMessage[i]==32){ // Only check when we meet a space. 32 is a space in ASCII
 			currentTextboxMessage[i]='\0';
-			if (bitmpTextWidth(&(currentTextboxMessage[_lastNewlinePosition+1]))>pageWidth*CONSTCHARW){
+			if (bitmpTextWidth(&(currentTextboxMessage[_lastNewlinePosition+1]))>pageWidth*2*CONSTCHARW){
 				uint8_t _didWork=0;
 				for (j=i-1;j>_lastNewlinePosition+1;j--){
 					//printf("J:%d\n",j);
@@ -214,7 +220,7 @@ void easyMessage(char* _newMessage){
 		}
 	}
 	// This code will make a new line if there needs to be one because of the last word
-	if (bitmpTextWidth(&(currentTextboxMessage[_lastNewlinePosition+1]))>pageWidth*CONSTCHARW){
+	if (bitmpTextWidth(&(currentTextboxMessage[_lastNewlinePosition+1]))>pageWidth*2*CONSTCHARW){
 		for (j=_cachedMessageLength-1;j>_lastNewlinePosition+1;j--){
 			if (currentTextboxMessage[j]==32){
 				currentTextboxMessage[j]='\0';
@@ -222,20 +228,22 @@ void easyMessage(char* _newMessage){
 			}
 		}
 	}
-
-
+	//////////////////////////////////////////////////////////////////
+	// Step 2 - Display words
+	//////////////////////////////////////////////////////////////////
+	controlLoop();
 	while(1){
 		controlsStart();
+		if (wasJustPressed(SCE_TOUCH)){
+			break;
+		}
 		controlsEnd();
 		startDrawing();
 		int i;
 		int _currentDrawPosition=0;
 		for (i=0;;++i){
-
-			printf("%s\n",&(currentTextboxMessage[_currentDrawPosition]));
 			drawString(&(currentTextboxMessage[_currentDrawPosition]),0,i*singleBlockSize);
 			_currentDrawPosition+=strlen(&(currentTextboxMessage[_currentDrawPosition]));
-			printf("%d\n",_currentDrawPosition);
 			if (currentTextboxMessage[_currentDrawPosition+1]==BONUSENDCHARACTER){
 				break;
 			}else{
@@ -244,8 +252,8 @@ void easyMessage(char* _newMessage){
 		}
 		endDrawing();
 	}
-
 	free(currentTextboxMessage);
+	controlLoop();
 }
 
 /*void laziestMessage(char* _myMessage){
@@ -411,7 +419,7 @@ void clearSong(){
 	}
 }
 
-char* sharedFilePicker(char _isSaveDialog, const char* _filterList){
+char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceExtension){
 	#ifdef NO_FANCY_DIALOG
 		#ifdef MANUALPATHENTRY
 			printf("Input path:\n");
@@ -497,11 +505,32 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList){
 		nfdchar_t *outPath = NULL;
 		nfdresult_t result;
 		if (_isSaveDialog){
-			result = NFD_SaveDialog( "GMSF,gtmusic,AngryLegGuy,mylegguy", NULL, &outPath );
+			result = NFD_SaveDialog( _filterList, NULL, &outPath );
 		}else{
-			result = NFD_OpenDialog( "GMSF,gtmusic,AngryLegGuy,mylegguy", NULL, &outPath );
+			result = NFD_OpenDialog( _filterList, NULL, &outPath );
 		}
 		if (result == NFD_OKAY){
+			// If we're saving, add a file extension if the user didn't give one
+			if (_isSaveDialog && _forceExtension){
+				signed int i;
+				char _foundDot=0;
+				for (i=strlen(outPath)-1;i>=0;--i){
+					if (outPath[i]=='\\' || outPath[i]=='/'){
+						_foundDot=0;
+						break;
+					}else if (outPath[i]=='.'){
+						_foundDot=1;
+						break;
+					}
+				}
+				if (!_foundDot){
+					char* _newPath = malloc(strlen(outPath)+strlen(".GMSF")+1);
+					strcpy(_newPath,outPath);
+					strcat(_newPath,".GMSF");
+					free(outPath);
+					outPath = _newPath;
+				}
+			}
 			return outPath;
 		}else if ( result == NFD_CANCEL ){
 			return NULL;
@@ -514,11 +543,11 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList){
 
 // This function returns malloc'd string or NULL
 char* selectLoadFile(){
-	return sharedFilePicker(0,"GMSF,gtmusic,AngryLegGuy,mylegguy");
+	return sharedFilePicker(0,"GMSF,gtmusic,AngryLegGuy,mylegguy",0);
 }
 
 char* selectSaveFile(){
-	return sharedFilePicker(1,"GMSF,gtmusic,AngryLegGuy,mylegguy");
+	return sharedFilePicker(1,"GMSF",1);
 }
 
 void findMaxX(){
@@ -833,13 +862,44 @@ void playAtPosition(s32 _startPosition){
 	}
 }
 
+// Here we hard code the number of bytes to write because we want the same number of bytes on all systems so that save files are cross platform
 void saveSong(char* _passedFilename){
 	FILE* fp = fopen(_passedFilename,"w");
 	if (fp!=NULL){
-
+		// Magic
+		fwrite(SAVEFORMATMAGIC,strlen(SAVEFORMATMAGIC),1,fp);
+		u8 _tempHoldVersion = SONGFORMATVERSION;
+			fwrite(&_tempHoldVersion,1,1,fp);
+		// Special IDs needed for loading
+		fwrite(&audioGearID,1,1,fp);
+		// Song info
+		s16 _tempHoldBPM = bpm;
+		s16 _tempHoldWidth = songWidth;
+		s16 _tempHoldHeight = songHeight;
+		_tempHoldBPM = fixShort(_tempHoldBPM);
+		_tempHoldWidth = fixShort(_tempHoldWidth);
+		_tempHoldHeight = fixShort(_tempHoldHeight);
+		fwrite(&_tempHoldBPM,2,1,fp);
+		fwrite(&_tempHoldWidth,2,1,fp);
+		fwrite(&_tempHoldHeight,2,1,fp);
+		
+		int _y;
+		for (_y=0;_y<songHeight;++_y){
+			int _x;
+			for (_x=0;_x<songWidth;++_x){
+				fwrite(&(songArray[_y][_x].id),1,1,fp);
+				if (songArray[_y][_x].id==audioGearID){
+					fwrite(songArray[_y][_x].extraData,1,AUDIOGEARSPACE*2,fp);
+					u8* _tempHoldVolume = getGearVolume(songArray[_y][_x].extraData);
+					fwrite(_tempHoldVolume,1,1,fp);
+				}
+			}
+		}
+		fwrite(SAVEENDMARKER,strlen(SAVEENDMARKER),1,fp);
 		fclose(fp);
 	}else{
-
+		easyMessage("Failed to open file.");
+		easyMessage(_passedFilename);
 	}
 	return;
 }
@@ -1535,19 +1595,24 @@ int L_setAudioGear(lua_State* passedState){
 }
 // one argument, the allowed file types
 int L_selectFile(lua_State* passedState){
-	#ifdef NO_FANCY_DIALOG
-		printf("Unsupported.\n");
+	char* _gottenString = sharedFilePicker(0,lua_tostring(passedState,1),0);
+	if (_gottenString!=NULL){
+		lua_pushstring(passedState,_gottenString);
+		free(_gottenString);
+		return 1;
+	}else{
 		return 0;
-	#else
-		char* _gottenString = sharedFilePicker(0,lua_tostring(passedState,1));
-		if (_gottenString!=NULL){
-			lua_pushstring(passedState,_gottenString);
-			free(_gottenString);
-			return 1;
-		}else{
-			return 0;
-		}
-	#endif
+	}
+}
+int L_saveFile(lua_State* passedState){
+	char* _gottenString = sharedFilePicker(1,lua_tostring(passedState,1),0);
+	if (_gottenString!=NULL){
+		lua_pushstring(passedState,_gottenString);
+		free(_gottenString);
+		return 1;
+	}else{
+		return 0;
+	}
 }
 int L_findMaxX(lua_State* passedState){
 	findMaxX();
@@ -1595,6 +1660,7 @@ void pushLuaFunctions(){
 	LUAREGISTER(L_getAudioGear,"getAudioGear");
 	LUAREGISTER(L_setAudioGear,"setAudioGear");
 	LUAREGISTER(L_selectFile,"selectFile");
+	LUAREGISTER(L_saveFile,"saveFile");
 	LUAREGISTER(L_findMaxX,"findMaxX");
 	LUAREGISTER(L_setMaxX,"setMaxX");
 	LUAREGISTER(L_getNumberInput,"getNumberInput");
@@ -1996,6 +2062,8 @@ void init(){
 	songWidth=400;
 	setSongXOffset(0);
 
+	initEmbeddedFont();
+
 	// Init note array before we do the Lua
 	setTotalNotes(1);
 	noteImages[0] = loadEmbeddedPNG("assets/Free/Images/grid.png");
@@ -2131,14 +2199,11 @@ void init(){
 
 	// Hopefully we've added some note images in the init.lua.
 	updateNoteIcon();
-
-	easyMessage("The FitnessGram Pacer Test is a multistage aerobic capacity test that progressively gets more difficult as it continues. The 20 meter pacer test will begin in 30 seconds. Line up at the start. The running speed starts slowly, but gets faster each minute after you hear this signal. [beep] A single lap should be completed each time you hear this sound. [ding] Remember to run in a straight line, and run as long as possible. The second time you fail to complete a lap before the sound, your test is over. The test will begin on the word start. On your mark, get ready, start.");
 }
 int main(int argc, char *argv[]){
 	printf("Loading...\n");
 	uiNoteIndex=1;
 	init();
-	initEmbeddedFont();
 	printf("Done loading.\n");
 
 	s16 _lastPlaceX=-1;

@@ -263,10 +263,58 @@ void loadDumbGtmusicFormat(FILE* fp){
 }
 
 // File format of Growtopia Music Simulator Final
-// Details are TBD
 #define FILE_FORMAT_GMSF 6
-void loadGMSFSong(){
+void loadGMSFSong(FILE* fp){
+	fseek(fp,strlen(SAVEFORMATMAGIC),SEEK_SET); // Seek past magic string
+	
+	u8 _readVersion;
+	u8 _readAudioGearID;
+	s16 _readWidth;
+	s16 _readHeight;
+	s16 _readBPM;
 
+	// General info
+	fread(&_readVersion,1,1,fp);
+	fread(&_readAudioGearID,1,1,fp);
+
+	fread(&_readBPM,2,1,fp);
+	fread(&_readWidth,2,1,fp);
+	fread(&_readHeight,2,1,fp);
+	
+	// Process general info
+	_readBPM = fixShort(_readBPM);
+	_readWidth = fixShort(_readWidth);
+	_readHeight = fixShort(_readHeight);
+	bpm = _readBPM;
+	setSongWidth(songArray,songWidth,_readWidth);
+	songWidth = _readWidth;
+	if (audioGearID!=_readAudioGearID){
+		printf("Audio gears will not work. %d;%d\n",audioGearID,_readAudioGearID);
+	}
+
+	// Bulk of the data
+	int _y;
+	for (_y=0;_y<_readHeight;++_y){
+		int _x;
+		for (_x=0;_x<_readWidth;++_x){
+			u8 _lastReadId;
+			fread(&(_lastReadId),1,1,fp);
+			_placeNoteLow(_x,_y,_lastReadId,0,songArray);
+			if (songArray[_y][_x].id==_readAudioGearID){
+				fread(songArray[_y][_x].extraData,AUDIOGEARSPACE*2+1,1,fp); // usually 10 bytes + the volume byte for 11 in total
+			}
+		}
+	}
+	char _possibleEndMagic[5];
+	_possibleEndMagic[4]='\0';
+	fread(_possibleEndMagic,4,1,fp);
+	if (strcmp(_possibleEndMagic,SAVEENDMARKER)!=0){
+		printf("Bad end of file magic.");
+		char i;
+		for (i=0;i<4;++i){
+			printf("%d\n",_possibleEndMagic[i]);
+		}
+	}
 }
 
 void loadSong(char* _passedFilename){
@@ -280,6 +328,7 @@ void loadSong(char* _passedFilename){
 		// TODO - Add detection for GMSF file format here.
 
 		// GMSO is the first 4 bytes of a Growtopia Music Simulator Online file
+		// GMSF is the first 4 bytes of a Growtopia Music Simulator Final file
 		if (_firstByte=='G'){
 			char _fourMagic[5];
 			_fourMagic[4]='\0';
@@ -287,12 +336,14 @@ void loadSong(char* _passedFilename){
 			fread(&(_fourMagic[1]),1,3,fp);
 			if (strcmp(_fourMagic,"GMSO")==0){
 				_detectedFormat=FILE_FORMAT_GMSO;
+			}else if (strcmp(_fourMagic,"GMSF")==0){
+				_detectedFormat=FILE_FORMAT_GMSF;
 			}else{
 				fseek(fp,1,SEEK_SET); // Undo the extra bytes we read otherwise
 			}
 		}
 
-		// If it's not a GMSO file...
+		// If it's not a GMSO or GMSF file...
 		if (_detectedFormat==FILE_FORMAT_UNKNOWN){
 			// Check for Growtopia Music Simulator Reborn file format.
 			// The first thing in Growtopia Music Simulator Reborn format is the version number. It started at 3 and ended at 6.
