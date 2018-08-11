@@ -7,16 +7,13 @@ This code is free software.
 /////////////////////////////////////////////////////////////////////////////
 https://forums.libsdl.org/viewtopic.php?p=15228
 
-todo - add optional update checker
-	Don't do with libGeneralGood
-		Should I use libCurl or SDL_Net?
 todo - Add icon to the exe
 	todo - Redo some of the more ugly icons, like BPM
 */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <arpa/inet.h> // For htons
 
 #include <GeneralGoodConfig.h>
 #include <GeneralGood.h>
@@ -25,26 +22,31 @@ todo - Add icon to the exe
 #include <GeneralGoodSound.h>
 #include <GeneralGoodImages.h>
 
-#ifndef DISABLEUPDATECHECKS
+#ifndef DISABLE_UPDATE_CHECKS
 	#include <SDL2/SDL_net.h>
 #endif
 
-#include <lua.h>
-#include <lualib.h>
-#include <lauxlib.h>
+#include <Lua/lua.h>
+#include <Lua/lualib.h>
+#include <Lua/lauxlib.h>
 
 #ifndef NO_FANCY_DIALOG
-	#include <nfd.h>
+	#if SUBPLATFORM == SUB_WINDOWS
+		#include <windows.h>
+		#include <Commdlg.h>
+	#else
+		#include <nfd.h>
+	#endif
 #endif
 
 #include "fonthelper.h"
 #include "luaDofileEmbedded.h"
+#include "nathanList.h"
 
 ///////////////////////////////////////
 #define VERSIONNUMBER 1
 #define VERSIONSTRING "v1.0"
 //////////////////
-#define APPLICATIONVERSION 1
 #define SETTINGSVERSION 1
 #define HOTKEYVERSION 1
 #define SONGFORMATVERSION 1
@@ -437,7 +439,148 @@ void clearSong(){
 	}
 }
 
-char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceExtension){
+// Windows has bad C library, the few useful functions it has Windows doesn't have.
+char* strndup(const char *str, size_t size){
+	char* _newBuffer = malloc(size+1);
+	int i;
+	for (i=0;i<size;++i){
+		_newBuffer[i] = str[i];
+	}
+	_newBuffer[size]='\0';
+	return _newBuffer;
+}
+
+// Desired format for programmer:
+// textFiles/txt,doc;ImageFiles/png,jpg;
+// Output for nfd:
+// txt,doc;png,jpg
+// Output for windows:
+// textFiles\0*.txt;*.doc\0ImageFiles\0*.png;*.jpg\0
+	// always append \0All\0*.*\0
+char* fixFiletypeFilter(const char* _passedFilters){
+	if (strlen(_passedFilters)==0){
+		return NULL;
+	}
+	
+	// Step 1 - Change
+		// textFiles/txt,doc;ImageFiles/png;jpg;
+		// into list entries
+		// textFiles/txt,doc
+		// ImageFiles/png,jpg
+	nathanList* _unparsedFilterChoices = calloc(1,sizeof(nathanList));
+	const char* _lastStrChop = _passedFilters;
+	const char* _currentCheck = _passedFilters;
+	while (_currentCheck[0]!='\0'){
+		if (_currentCheck[0]==';'){
+			addNathanList(_unparsedFilterChoices)->memory = strndup(_lastStrChop,_currentCheck-_lastStrChop);
+			_lastStrChop = _currentCheck+1; // Make sure we don't have the semicolon
+		}
+		_currentCheck++;
+	}
+
+	// Step 2 - Parse
+		// textFiles/txt,doc
+		// into list entries
+		// textFiles
+		// txt,doc
+	nathanList* _filterNames = calloc(1,sizeof(nathanList));
+	nathanList* _unparsedFilterLists = calloc(1,sizeof(nathanList));
+	int _cachedListLength = getNathanListLength(_unparsedFilterChoices);
+	int i;
+	for (i=0;i<_cachedListLength;++i){
+		nathanList* _iterationList = getNathanList(_unparsedFilterChoices,i);
+		_currentCheck = _iterationList->memory;
+		while (_currentCheck[0]!='\0'){
+			if (_currentCheck[0]=='/'){
+				addNathanList(_filterNames)->memory = strndup(_iterationList->memory,_currentCheck-(char*)_iterationList->memory);
+				addNathanList(_unparsedFilterLists)->memory = strdup(_currentCheck+1);
+				break;
+			}
+			_currentCheck++;
+		}
+	}
+
+	// Step 2 - Parse
+		// txt,doc
+		// Into list entries
+		// txt
+		// doc
+	_cachedListLength = getNathanListLength(_filterNames);
+	nathanList** _fileTypes = malloc(sizeof(nathanList*)*_cachedListLength);
+	for (i=0;i<_cachedListLength;++i){
+		_fileTypes[i] = calloc(1,sizeof(nathanList));
+		nathanList* _iterationList = getNathanList(_unparsedFilterLists,i);
+		_currentCheck = _iterationList->memory;
+		const char* _lastStrChop = _currentCheck;
+		while (1){
+			if (_currentCheck[0]==',' || _currentCheck[0]=='\0'){
+				addNathanList(_fileTypes[i])->memory = strndup(_lastStrChop,_currentCheck-_lastStrChop);
+				if (_currentCheck[0]=='\0'){
+					break;
+				}
+				_currentCheck++;
+				_lastStrChop = _currentCheck;
+			}
+			_currentCheck++;
+		}
+	}
+
+	// Complete buffer we'll return
+	char* _returnString = malloc(256);
+	_returnString[0]='\0';
+
+	// Finally, make our usable format string
+	#if SUBPLATFORM == SUB_WINDOWS // win
+		_cachedListLength = getNathanListLength(_filterNames);
+		// We move this pointer around when making this string
+		char* _currentAppendPosition = _returnString;
+		// Do the bulk
+		for (i=0;i<_cachedListLength;++i){
+			strcpy(_currentAppendPosition,getNathanList(_filterNames,i)->memory);
+			_currentAppendPosition+=strlen(getNathanList(_filterNames,i)->memory)+1;
+			int j;
+			for (j=0;j<getNathanListLength(_fileTypes[i]);++j){
+				strcpy(_currentAppendPosition,"*.");
+				_currentAppendPosition+=2;
+				strcpy(_currentAppendPosition,getNathanList(_fileTypes[i],j)->memory);
+				strcat(_currentAppendPosition,";");
+				_currentAppendPosition+=strlen(getNathanList(_fileTypes[i],j)->memory)+1;
+			}
+			// Remove extra semicolon
+			(_currentAppendPosition-1)[0]='\0';
+		}
+		// Append All\0*.*\0
+		strcpy(_currentAppendPosition,"All");
+		_currentAppendPosition+=4;
+		strcpy(_currentAppendPosition,"*");
+	#else // nfd
+		_cachedListLength = getNathanListLength(_filterNames);
+		for (i=0;i<_cachedListLength;++i){
+			int j;
+			for (j=0;j<getNathanListLength(_fileTypes[i]);++j){
+				strcat(_returnString,getNathanList(_fileTypes[i],j)->memory);
+				strcat(_returnString,",");
+			}
+			_returnString[strlen(_returnString)-1]='\0'; // Delete the extra comma we have
+			strcat(_returnString,";");
+		}
+		_returnString[strlen(_returnString)-1]='\0'; // Delete the extra semicolon we have
+	#endif
+
+	// Free linked lists
+	_cachedListLength = getNathanListLength(_filterNames);
+	freeNathanList(_filterNames,1);
+	freeNathanList(_unparsedFilterLists,1);
+	freeNathanList(_unparsedFilterChoices,1);
+	// Free list of file types
+	for (i=0;i<_cachedListLength;++i){
+		freeNathanList(_fileTypes[i],1);
+	}
+	// Done
+	return _returnString;
+}
+
+char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceExtension, char* _forcedExtension){
 	#ifdef NO_FANCY_DIALOG
 		#ifdef MANUALPATHENTRY
 			printf("Input path:\n");
@@ -520,52 +663,100 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 			}
 		#endif
 	#else
-		nfdchar_t *outPath = NULL;
-		nfdresult_t result;
-		if (_isSaveDialog){
-			result = NFD_SaveDialog( _filterList, NULL, &outPath );
-		}else{
-			result = NFD_OpenDialog( _filterList, NULL, &outPath );
-		}
-		if (result == NFD_OKAY){
-			// If we're saving, add a file extension if the user didn't give one
-			if (_isSaveDialog && _forceExtension){
-				signed int i;
-				char _foundDot=0;
-				for (i=strlen(outPath)-1;i>=0;--i){
-					if (outPath[i]=='\\' || outPath[i]=='/'){
-						_foundDot=0;
-						break;
-					}else if (outPath[i]=='.'){
-						_foundDot=1;
-						break;
-					}
+		char* _fixedFilterlist = fixFiletypeFilter(_filterList);
+		char* _foundCompletePath=NULL;
+		#if SUBPLATFORM == SUB_WINDOWS
+			// This man is a hero.
+			//https://www.daniweb.com/programming/software-development/code/217307/a-simple-getopenfilename-example
+
+			OPENFILENAME ofn;
+			// a another memory buffer to contain the file name
+			char szFile[512];
+			char _didWork=0;
+			// open a file name
+			// Meaning of these properties can be found here:
+			//https://docs.microsoft.com/en-us/windows/desktop/api/commdlg/ns-commdlg-tagofna
+			ZeroMemory( &ofn , sizeof( ofn));
+			ofn.lStructSize = sizeof ( ofn );
+			ofn.hwndOwner = NULL;
+			ofn.lpstrFile = szFile;
+			ofn.lpstrFile[0] = '\0';
+			ofn.nMaxFile = sizeof( szFile );
+			ofn.lpstrFilter = _fixedFilterlist;
+			ofn.nFilterIndex = 1; // Our currently selected filter by default. Starts at 1 because Microsoft.
+			ofn.lpstrFileTitle = NULL;
+			ofn.nMaxFileTitle = 0;
+			ofn.lpstrInitialDir = NULL;
+			ofn.Flags = OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST ;
+			if (_isSaveDialog){
+				if (GetSaveFileName( &ofn )!=0){
+					_didWork=1;
 				}
-				if (!_foundDot){
-					char* _newPath = malloc(strlen(outPath)+strlen(".GMSF")+1);
-					strcpy(_newPath,outPath);
-					strcat(_newPath,".GMSF");
-					free(outPath);
-					outPath = _newPath;
+			}else{
+				if (GetOpenFileName( &ofn )!=0){
+					_didWork=1;
 				}
 			}
-			return outPath;
-		}else if ( result == NFD_CANCEL ){
-			return NULL;
-		}else{
-			printf("Error: %s\n", NFD_GetError() );
-			return NULL;
+			if (_didWork){
+				_foundCompletePath = strdup(szFile);
+			}else{
+				return NULL;
+			}
+			// Now simpley display the file name 
+			//MessageBox ( NULL , ofn.lpstrFile , "File Name" , MB_OK);
+		#else
+			nfdchar_t *outPath = NULL;
+			nfdresult_t result;
+			if (_isSaveDialog){
+				result = NFD_SaveDialog( _fixedFilterlist, NULL, &outPath );
+			}else{
+				result = NFD_OpenDialog( _fixedFilterlist, NULL, &outPath );
+			}
+			if (result == NFD_OKAY){
+				_foundCompletePath=outPath;
+			}else if ( result == NFD_CANCEL ){
+				return NULL;
+			}else{
+				printf("Error: %s\n", NFD_GetError() );
+				return NULL;
+			}
+		#endif
+		free(_fixedFilterlist);
+
+		// If we're saving, add a file extension if the user didn't give one
+		if (_isSaveDialog && _forceExtension && _foundCompletePath!=NULL){
+			signed int i;
+			char _foundDot=0;
+			for (i=strlen(_foundCompletePath)-1;i>=0;--i){
+				if (_foundCompletePath[i]=='\\' || _foundCompletePath[i]=='/'){
+					_foundDot=0;
+					break;
+				}else if (_foundCompletePath[i]=='.'){
+					_foundDot=1;
+					break;
+				}
+			}
+			if (!_foundDot){
+				char* _newPath = malloc(strlen(_foundCompletePath)+strlen(".GMSF")+1);
+				strcpy(_newPath,_foundCompletePath);
+				strcat(_newPath,_forcedExtension);
+				free(_foundCompletePath);
+				_foundCompletePath = _newPath;
+			}
 		}
+		printf("will return.\n");
+		printf("%s\n",_foundCompletePath);
+		return _foundCompletePath;
 	#endif
 }
 
 // This function returns malloc'd string or NULL
 char* selectLoadFile(){
-	return sharedFilePicker(0,"GMSF,gtmusic,AngryLegGuy,mylegguy",0);
+	return sharedFilePicker(0,"Growtopia Music Simulator/GMSF,gtmusic,AngryLegGuy,mylegguy;",0,NULL);
 }
 
 char* selectSaveFile(){
-	return sharedFilePicker(1,"GMSF",1);
+	return sharedFilePicker(1,"GMSF/GMSF;",1,".GMSF");
 }
 
 void findMaxX(){
@@ -767,12 +958,15 @@ u16 bitmpTextWidth(char* _passedString){
 	return strlen(_passedString)*(CONSTCHARW);
 }
 
+// Flip every bit in the file called "possible"
 u32 bpmFormula(u32 re){
-	return 60000 / (4 * re);
+	return 15000/re;
+	//return 60000 / (4 * re);
 }
 // Given note wait time, find BPM
 u32 reverseBPMformula(u32 re){
-	return 15000/re;
+	//return 15000/re;
+	return bpmFormula(re);
 }
 
 void centerAround(u32 _passedPosition){
@@ -1708,7 +1902,7 @@ int L_setAudioGear(lua_State* passedState){
 }
 // one argument, the allowed file types
 int L_selectFile(lua_State* passedState){
-	char* _gottenString = sharedFilePicker(0,lua_tostring(passedState,1),0);
+	char* _gottenString = sharedFilePicker(0,lua_tostring(passedState,1),0,NULL);
 	if (_gottenString!=NULL){
 		lua_pushstring(passedState,_gottenString);
 		free(_gottenString);
@@ -1718,7 +1912,7 @@ int L_selectFile(lua_State* passedState){
 	}
 }
 int L_saveFile(lua_State* passedState){
-	char* _gottenString = sharedFilePicker(1,lua_tostring(passedState,1),0);
+	char* _gottenString = sharedFilePicker(1,lua_tostring(passedState,1),0,NULL);
 	if (_gottenString!=NULL){
 		lua_pushstring(passedState,_gottenString);
 		free(_gottenString);
@@ -2131,7 +2325,7 @@ void audioGearGUI(u8* _gearData){
 }
 
 char updateAvailable(){
-	#ifdef DISABLEUPDATECHECKS
+	#ifdef DISABLE_UPDATE_CHECKS
 		return 0;
 	#else
 		// Make sure updates are not disabled. Do not combine this check with the one above, this code should be able to be compiled without SDLNet

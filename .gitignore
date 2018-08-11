@@ -3,3 +3,5 @@
 *.legSettings
 vgcore*
 *.GMSF
+*.a
+bin/a.txt

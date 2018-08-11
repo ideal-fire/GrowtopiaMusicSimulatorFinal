@@ -10,12 +10,14 @@
 // https://github.com/MyLegGuy/GrowtopiaMusicSimulatorLegacy/blob/master/GrowtopiaMusicSimulatorClassic/src/nathan/MainClass.java#L1490
 #define FILE_FORMAT_GMSCLASSIC 1
 void loadGMSClassicSong(FILE* fp){
-	fseek(fp,3,SEEK_CUR); // idk, this is just what Growtopia Music Simulator Reborn does
-	for (int y = 0; y < 14; y++) {
-		for (int x = 0; x < 400; x++) {
-			u8 _readId = fgetc(fp);
+	fseek(fp,3,SEEK_SET); // maxX
+	int y;
+	for (y = 0; y < 14; ++y) {
+		int x;
+		for (x = 0; x < 400; ++x) {
+			int _readId = fgetc(fp);
 			_readId-=48; // Convert from ASCII
-			_placeNoteLow(x,y,_readId-48,0,songArray);
+			_placeNoteLow(x,y,_readId,0,songArray);
 		}
 	}
 }
@@ -164,7 +166,7 @@ void loadGMSOSong(FILE* fp){
 		for (j=0;j<14;++j){
 			u8 _readId = fgetc(fp);
 			_readId-=48; // Convert from ASCII
-			_placeNoteLow(i,j,_readId-48,0,songArray);
+			_placeNoteLow(i,j,_readId,0,songArray);
 		}
 	}
 }
@@ -385,7 +387,7 @@ void loadSong(char* _passedFilename){
 				// If it's not a GTMUSIC file...
 				if (_detectedFormat==FILE_FORMAT_UNKNOWN){
 					// Detect .mylegguy file extension
-					if (strlen(_passedFilename)>=8 && strcmp(&(_passedFilename[strlen(_passedFilename)-8]),".mylegguy")==0){
+					if (strlen(_passedFilename)>=8 && strcmp(&(_passedFilename[strlen(_passedFilename)-9]),".mylegguy")==0){
 						_detectedFormat = FILE_FORMAT_GMSCLASSIC;
 					}
 				}
