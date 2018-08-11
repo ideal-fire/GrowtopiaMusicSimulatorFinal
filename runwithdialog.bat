@@ -1,3 +1,3 @@
 cd bin
-a
+a > a.txt
 cd ..

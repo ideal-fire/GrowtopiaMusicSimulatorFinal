@@ -7,8 +7,8 @@ This code is free software.
 /////////////////////////////////////////////////////////////////////////////
 todo - Add icon to the exe
 	todo - Redo some of the more ugly icons, like BPM
+todo - metadata button
 */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -82,8 +82,8 @@ todo - Add icon to the exe
 
 #define BONUSENDCHARACTER 1 // char value to signal the true end of the message text in easyMessage
 
-#define SAVEENDMARKER "FSMG"
 #define SAVEFORMATMAGIC "GMSF"
+#define SAVEENDMARKER "FSMG"
 
 #define UPDATEPASTE "E8h4z5yv"
 
@@ -97,7 +97,7 @@ u8 optionZeroBasedPosition=0;
 u8 optionDoFancyPage=1;
 u8 optionDoCenterPlay=0;
 u8 optionExitConfirmation=1;
-u8 optionDoubleXAllowsExit=0; // If clicking the X button twice lets you exit even with the confirmation prompt up
+u8 optionDoubleXAllowsExit=1; // If clicking the X button twice lets you exit even with the confirmation prompt up
 u8 optionUpdateCheck=1;
 ////////////////////////////////////////////////
 // From libGeneralGood
@@ -189,6 +189,8 @@ int uiUIScrollIndex=-1;
 //extern SDL_Keycode lastSDLPressedKey;
 
 const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c'};
+
+s8 masterVolume=100;
 
 ////////////////////////////////////////////////
 // Code stolen from Happy Land.
@@ -365,19 +367,23 @@ void loadHotkeys(){
 			for (i=0;i<totalNotes;++i){
 				fread(&(noteHotkeys[i]),sizeof(SDL_Keycode),1,fp);
 			}
-			fread(&totalUI,sizeof(u16),1,fp);
-			for (i=0;i<totalUI;++i){
+			u16 _readTotalUI;
+			fread(&_readTotalUI,sizeof(u16),1,fp);
+			for (i=0;i<_readTotalUI;++i){
 				u8 _lastLoadedID;
 				fread(&(_lastLoadedID),sizeof(u8),1,fp);
 				if (_lastLoadedID!=U_NOTUNIQUE){
 					int j;
-					for (j=0;j<totalUI;++j){
+					for (j=0;j<_readTotalUI;++j){
 						if (myUIBar[j].uniqueId==_lastLoadedID){
 							fread(&(uiHotkeys[j]),sizeof(SDL_Keycode),1,fp);
 							break;
 						}
 					}
 				}
+			}
+			if (_readTotalUI!=totalUI){
+				printf("Settings read total UI: %d. Actual total UI: %d\n",_readTotalUI,totalUI);
 			}
 		}
 		fclose(fp);
@@ -1298,6 +1304,14 @@ void uiUIScroll(){
 	}
 }
 
+void uiSetMasterVolume(){
+	s8 _newVolume=-1;
+	do{
+		_newVolume = getNumberInput("Master volume (1-100)",masterVolume);
+	}while(!(_newVolume>=0 && _newVolume<=100));
+	masterVolume = _newVolume;
+}
+
 void uiCredits(){
 	while(1){
 		controlsStart();
@@ -1531,6 +1545,7 @@ int fixY(int _y){
 	return _y+globalDrawYOffset;
 }
 
+// Add uiElement to main myUIBar and return it
 uiElement* addUI(){
 	++totalUI;
 	myUIBar = realloc(myUIBar,sizeof(uiElement)*totalUI);
@@ -1984,11 +1999,16 @@ void goodLuaDofile(lua_State* passedState, char* _passedFilename){
 	}
 }
 
+// The 0-100 scale
+double volumeToPercent(s8 _passedVolume){
+	return _passedVolume/(double)100;
+}
+
 void goodPlaySound(CROSSSFX* _passedSound, int _volume){
 	#if !DISABLESOUND
 		if (_passedSound!=NULL){
 			int _noteChannel = Mix_PlayChannel( -1, _passedSound, 0 );
-			Mix_Volume(_noteChannel,(_volume/(double)100)*MIX_MAX_VOLUME);
+			Mix_Volume(_noteChannel,volumeToPercent(_volume)*volumeToPercent(masterVolume)*MIX_MAX_VOLUME);
 		}
 	#endif
 }
@@ -2547,7 +2567,7 @@ void init(){
 	_newButton->activateFunc = uiKeyConf;
 	_newButton->uniqueId = U_KEYCONF;
 
-	// Two general use UI buttons
+	// Three general use UI buttons
 	backButtonUI.image = loadEmbeddedPNG("assets/Free/Images/backButton.png");
 	backButtonUI.activateFunc = NULL;
 	backButtonUI.uniqueId=U_BACK;
@@ -2559,6 +2579,12 @@ void init(){
 	volumeButtonUI.image = loadEmbeddedPNG("assets/Free/Images/volumeButton.png");
 	volumeButtonUI.activateFunc=NULL;
 	volumeButtonUI.uniqueId=U_VOL;
+
+	//////////////////////////////
+	// Add the shared volume button to the main UI bar
+	uiElement* _slotForSharedVolume = addUI();
+	memcpy(_slotForSharedVolume,&volumeButtonUI,sizeof(uiElement));
+	_slotForSharedVolume->activateFunc=uiSetMasterVolume;
 
 	// If we need more space for the UI because screen in small, add moreUI button
 	if (pageWidth<totalUI+3){ // 4 spaces for page number display. We only subtract 3 because we can use the labels on the far right as a UI spot
@@ -2610,7 +2636,6 @@ void init(){
 			easyMessage("Update available.");
 		}
 	}
-	
 }
 int main(int argc, char *argv[]){
 	printf("Loading...\n");
