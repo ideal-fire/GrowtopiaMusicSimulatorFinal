@@ -5,8 +5,6 @@ This code is free software.
 		Note: CC0 is not 20 pages and can be summarized in 3 words.
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code because i worked hard" For actual license, see LICENSE file.
 /////////////////////////////////////////////////////////////////////////////
-https://forums.libsdl.org/viewtopic.php?p=15228
-
 todo - Add icon to the exe
 	todo - Redo some of the more ugly icons, like BPM
 */
@@ -2410,6 +2408,7 @@ char updateAvailable(){
 
 void init(){
 	initGraphics(832,480,&screenWidth,&screenHeight);
+	setWindowTitle("Growtopia Music Simulator Final");
 	setClearColor(192,192,192,255);
 	if (screenWidth!=832 || screenHeight!=480){
 		isMobile=1;
@@ -2454,7 +2453,7 @@ void init(){
 	songArray = calloc(1,sizeof(noteSpot*)*songHeight);
 	setSongWidth(songArray,0,400);
 	songWidth=400;
-	setSongXOffset(0);
+	songXOffset=0; // Raw to init values for scripts. Real set is after loading settings
 
 	initEmbeddedFont();
 
@@ -2591,6 +2590,9 @@ void init(){
 
 	// Hopefully we've added some note images in the init.lua.
 	updateNoteIcon();
+
+	// After we've loaded settings
+	setSongXOffset(0);
 
 	if (checkFileExist("./noupdate")==1){
 		optionUpdateCheck=0;
