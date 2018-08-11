@@ -2211,6 +2211,30 @@ char noteHotkeyCheck(){
 	return 0;
 }
 
+char* makeAudioGearString(noteSpot** _passedSong){
+	char* _completeString = malloc(AUDIOGEARSPACE*3+1+(AUDIOGEARSPACE-1));
+	_completeString[0]='\0';
+	int i;
+	for (i=0;i<AUDIOGEARSPACE;++i){
+		int j;
+		for (j=0;j<songHeight;++j){
+			if (_passedSong[j][i].id!=0){
+				if (i!=0){
+					addChar(_completeString,' ');
+				}
+				addChar(_completeString,extraNoteInfo[_passedSong[j][i].id].letter);
+				addChar(_completeString,noteNames[j]);
+				addChar(_completeString,extraNoteInfo[_passedSong[j][i].id].accidental);
+				break;
+			}
+		}
+	}
+	if (strlen(_completeString)==0){
+		strcpy(_completeString,"NoData"); // Shrinking AUDIOGEARSPACE too much could cause this to overflow
+	}
+	return _completeString;
+}
+
 void audioGearGUI(u8* _gearData){
 	// UI variables
 	uiElement* _foundUpUI = NULL;
@@ -2240,6 +2264,13 @@ void audioGearGUI(u8* _gearData){
 			_fakedMapArray[_gearData[i*2+1]][i].id=_gearData[i*2];
 		}
 	}
+	// Init info for user to see
+	char _volumeString[strlen("Vol: ")+3+1];
+		sprintf(_volumeString,"Vol: %d",*_gearVolume);
+	char* _completeGearString=NULL;
+	if (!isMobile){
+		_completeGearString = makeAudioGearString(_fakedMapArray);
+	}
 	while(1){
 		controlsStart();
 		if (wasJustPressed(SCE_TOUCH)){
@@ -2250,28 +2281,9 @@ void audioGearGUI(u8* _gearData){
 					if (_gearUIPointers[_placeX]->uniqueId==U_BACK){
 						break;
 					}else if (_gearUIPointers[_placeX]->uniqueId==U_INFO){
+						free(_completeGearString);
+						_completeGearString = makeAudioGearString(_fakedMapArray);
 						controlLoop();
-						char _completeString[AUDIOGEARSPACE*3+1+(AUDIOGEARSPACE-1)];
-						char _volumeString[strlen("Vol: ")+3+1];
-						sprintf(_volumeString,"Vol: %d",*_gearVolume);
-						_completeString[0]='\0';
-						for (i=0;i<AUDIOGEARSPACE;++i){
-							int j;
-							for (j=0;j<songHeight;++j){
-								if (_fakedMapArray[j][i].id!=0){
-									if (i!=0){
-										addChar(_completeString,' ');
-									}
-									addChar(_completeString,extraNoteInfo[_fakedMapArray[j][i].id].letter);
-									addChar(_completeString,noteNames[j]);
-									addChar(_completeString,extraNoteInfo[_fakedMapArray[j][i].id].accidental);
-									break;
-								}
-							}
-						}
-						if (strlen(_completeString)==0){
-							strcpy(_completeString,"NoData"); // Shrinking AUDIOGEARSPACE too much could cause this to overflow
-						}
 						while(1){
 							controlsStart();
 							if (wasJustPressed(SCE_TOUCH)){
@@ -2279,11 +2291,10 @@ void audioGearGUI(u8* _gearData){
 							}
 							controlsEnd();
 							startDrawing();
-							drawString(_completeString,0,0);
+							drawString(_completeGearString,0,0);
 							drawString(_volumeString,0,CONSTCHARW);
 							endDrawing();
 						}
-
 						controlLoop();
 					}else if (_gearUIPointers[_placeX]->uniqueId==U_VOL){
 						u8 _newVolume;
@@ -2291,6 +2302,7 @@ void audioGearGUI(u8* _gearData){
 							_newVolume = getNumberInput("Audio Gear volume (1-100)",*_gearVolume);
 						}while(_newVolume<=0 || _newVolume>100);
 						*_gearVolume=_newVolume;
+						sprintf(_volumeString,"Vol: %d",*_gearVolume);
 					}else{
 						controlLoop();
 						_gearUIPointers[_placeX]->activateFunc();
@@ -2306,6 +2318,11 @@ void audioGearGUI(u8* _gearData){
 					}
 					// Place our new note
 					_placeNoteLow(_placeX,_placeY+songYOffset,getUINoteID(),optionPlayOnPlace,_fakedMapArray);
+					
+					if (!isMobile){
+						free(_completeGearString);
+						_completeGearString = makeAudioGearString(_fakedMapArray);
+					}
 				}
 			}
 		}
@@ -2320,8 +2337,13 @@ void audioGearGUI(u8* _gearData){
 		startDrawing();
 		drawSong(_fakedMapArray,AUDIOGEARSPACE,visiblePageHeight,0,songYOffset);
 		drawUIPointers(_gearUIPointers,_totalGearUI);
+		if (!isMobile){
+			drawString(_completeGearString,(AUDIOGEARSPACE+2)*singleBlockSize,singleBlockSize);
+			drawString(_volumeString,(AUDIOGEARSPACE+2)*singleBlockSize,singleBlockSize*2);
+		}
 		endDrawing();
 	}
+	free(_completeGearString);
 	//
 	// Transfer data from song map to audio gear	
 	for (i=0;i<AUDIOGEARSPACE;++i){
