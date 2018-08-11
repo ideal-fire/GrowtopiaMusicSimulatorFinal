@@ -741,15 +741,14 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 				}
 			}
 			if (!_foundDot){
-				char* _newPath = malloc(strlen(_foundCompletePath)+strlen(".GMSF")+1);
+				char* _newPath = malloc(strlen(_foundCompletePath)+strlen(_forcedExtension)+1);
 				strcpy(_newPath,_foundCompletePath);
 				strcat(_newPath,_forcedExtension);
 				free(_foundCompletePath);
 				_foundCompletePath = _newPath;
 			}
 		}
-		printf("will return.\n");
-		printf("%s\n",_foundCompletePath);
+		controlsResetEmpty(); // Because we didn't notice click up
 		return _foundCompletePath;
 	#endif
 }
@@ -2281,8 +2280,10 @@ void audioGearGUI(u8* _gearData){
 					if (_gearUIPointers[_placeX]->uniqueId==U_BACK){
 						break;
 					}else if (_gearUIPointers[_placeX]->uniqueId==U_INFO){
-						free(_completeGearString);
-						_completeGearString = makeAudioGearString(_fakedMapArray);
+						if (isMobile){
+							free(_completeGearString);
+							_completeGearString = makeAudioGearString(_fakedMapArray);
+						}
 						controlLoop();
 						while(1){
 							controlsStart();
@@ -2317,7 +2318,7 @@ void audioGearGUI(u8* _gearData){
 						_fakedMapArray[i][_placeX].id=0;
 					}
 					// Place our new note
-					_placeNoteLow(_placeX,_placeY+songYOffset,getUINoteID(),optionPlayOnPlace,_fakedMapArray);
+					_placeNoteLow(_placeX,_placeY+songYOffset,lastClickWasRight ? 0 : getUINoteID(),optionPlayOnPlace,_fakedMapArray);
 					
 					if (!isMobile){
 						free(_completeGearString);
