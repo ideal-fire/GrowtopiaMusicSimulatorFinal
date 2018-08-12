@@ -5,9 +5,11 @@ This code is free software.
 		Note: CC0 is not 20 pages and can be summarized in 3 words.
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code because i worked hard" For actual license, see LICENSE file.
 /////////////////////////////////////////////////////////////////////////////
+todo - add prompt text for text input
+	display it under the textbox to make it more possible for the user to be able to see the textbox when typing
 todo - Add icon to the exe
 	todo - Redo some of the more ugly icons, like BPM
-todo - metadata button
+todo - script button
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,6 +85,7 @@ todo - metadata button
 #define BONUSENDCHARACTER 1 // char value to signal the true end of the message text in easyMessage
 
 #define SAVEFORMATMAGIC "GMSF"
+#define METADATAMARKER "META"
 #define SAVEENDMARKER "FSMG"
 
 #define UPDATEPASTE "E8h4z5yv"
@@ -192,6 +195,8 @@ const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c
 
 s8 masterVolume=100;
 
+char* currentSongMetadata=NULL;
+
 ////////////////////////////////////////////////
 // Code stolen from Happy Land.
 // Displays whatever message you want. Text will wrap.
@@ -266,20 +271,8 @@ void easyMessage(char* _newMessage){
 		endDrawing();
 	}
 	free(currentTextboxMessage);
-	controlLoop();
+	controlsResetEmpty();
 }
-
-/*void laziestMessage(char* _myMessage){
-	int _totalLines=ceil(strlen(_myMessage)/(pageWidth*2));
-	char _duplicateMessage[strlen(_myMessage)+_totalLines];
-	strcpy(_duplicateMessage,_myMessage);
-
-	int i;
-	for (i=1;i<_totalLines;++i){
-		int _bytesToMove = strlen(_myMessage[])
-		memmove()
-	}
-}*/
 
 char* getDataFilePath(const char* _passedFilename){
 	char* _fixedPathBuffer = malloc(strlen(_passedFilename)+strlen(getFixPathString(TYPE_DATA))+1);
@@ -584,6 +577,94 @@ char* fixFiletypeFilter(const char* _passedFilters){
 	return _returnString;
 }
 
+char* textInput(char* _initial, char* _restrictedCharacter){
+	controlLoop();
+	int _maxChars;
+	if (_initial!=NULL){
+		_maxChars = strlen(_initial)>pageWidth*2 ? strlen(_initial) : pageWidth*2;
+	}else{
+		_maxChars = pageWidth*2;
+	}
+	char* _userInput = calloc(1,_maxChars+1);
+	if (_initial!=NULL){
+		strcpy(_userInput,_initial);
+	}
+	char _isDone=0;
+	SDL_StartTextInput();
+	while (!_isDone){
+		SDL_Event event;
+		if (SDL_PollEvent(&event)) {
+			switch (event.type) {
+				case SDL_QUIT:
+					XOutFunction();
+					break;
+				case SDL_TEXTINPUT:
+					if (_userInput!=NULL){
+						int i;
+						int _cachedTotalRestircted = strlen(_restrictedCharacter);
+						char _stopCharacter=0;
+						for (i=0;i<_cachedTotalRestircted;++i){
+							if (event.text.text[0]==_restrictedCharacter[i]){
+								_stopCharacter=1;
+								break;
+							}
+						}
+						if (!_stopCharacter){
+							// Add character the user typed as long as it's not going to overflow
+							if (strlen(_userInput)<_maxChars){
+								strcat(_userInput, event.text.text);
+							}
+						}
+					}
+					break;
+				case SDL_KEYDOWN:
+					if (_userInput!=NULL){
+						if (event.key.keysym.sym == SDLK_BACKSPACE){
+							if (strlen(_userInput)>0){
+								_userInput[strlen(_userInput)-1]='\0';
+							}
+						}else if (event.key.keysym.sym == SDLK_KP_ENTER || event.key.keysym.sym==SDLK_RETURN){
+							_isDone=1;
+						}else if (event.key.keysym.sym == SDLK_ESCAPE){
+							free(_userInput);
+							_userInput=NULL;
+							_isDone=1;
+						}
+					}
+					break;
+				case SDL_FINGERDOWN:
+					;
+					int _foundY = event.tfinger.y * _generalGoodRealScreenHeight;
+					if(_foundY<singleBlockSize){
+						_isDone=1;
+					}else if  (_foundY<singleBlockSize*2){
+						free(_userInput);
+						_userInput=NULL;
+						_isDone=1;
+					}
+					break;
+			}
+		}
+
+		startDrawing();
+		// Draw rectangles for buttons
+		drawRectangle(0,0,logicalScreenWidth,singleBlockSize,0,255,0,255);
+		drawRectangle(0,singleBlockSize,logicalScreenWidth,singleBlockSize,255,0,0,255);
+		// Text depends on platform
+		drawString(isMobile ? "Done" : "Done: Enter",0,CONSTCHARW/2);
+		drawString(isMobile ? "Cancel" : "Cancel: Escape",0,CONSTCHARW/2+singleBlockSize);
+		// Textbox
+		drawRectangle(0,singleBlockSize*2,logicalScreenWidth,singleBlockSize,255,255,255,255);
+			if (_userInput!=NULL){
+				drawString(_userInput,0,CONSTCHARW/2+singleBlockSize*2);
+			}
+		endDrawing();
+	}
+	SDL_StopTextInput();
+	controlsResetEmpty(); // Because we didn't catch the finger up or anything
+	return _userInput;
+}
+
 char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceExtension, char* _forcedExtension){
 	#ifdef NO_FANCY_DIALOG
 		#ifdef MANUALPATHENTRY
@@ -594,70 +675,7 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 			removeNewline(_readLine);
 			return _readLine;
 		#else // Input for mobile
-			controlLoop();
-			char* _userInput = calloc(1,pageWidth*2+1);
-			char _isDone=0;
-			SDL_StartTextInput();
-			while (!_isDone){
-				SDL_Event event;
-				if (SDL_PollEvent(&event)) {
-					switch (event.type) {
-						case SDL_QUIT:
-							XOutFunction();
-							break;
-						case SDL_TEXTINPUT:
-							if (_userInput!=NULL){
-								// Skip some invalid characters
-								if (event.text.text[0]==' ' || event.text.text[0]=='/' || event.text.text[0]=='?' || event.text.text[0]=='%' || event.text.text[0]=='*' || event.text.text[0]==':' || event.text.text[0]=='|' || event.text.text[0]=='\"' || event.text.text[0]=='<' || event.text.text[0]=='>'){
-									break;
-								}
-								// Add character the user typed as long as it's not going to overflow
-								if (strlen(_userInput)<pageWidth*2){
-									strcat(_userInput, event.text.text);
-								}
-							}
-							break;
-						case SDL_KEYDOWN:
-							if (_userInput!=NULL){
-								if (event.key.keysym.sym == SDLK_BACKSPACE){
-									if (strlen(_userInput)>0){
-										_userInput[strlen(_userInput)-1]='\0';
-									}
-								}else if (event.key.keysym.sym == SDLK_KP_ENTER || event.key.keysym.sym==SDLK_RETURN){
-									_isDone=1;
-								}else if (event.key.keysym.sym == SDLK_ESCAPE){
-									free(_userInput);
-									_userInput=NULL;
-									_isDone=1;
-								}
-							}
-							break;
-						case SDL_FINGERDOWN:
-							;
-							int _foundY = event.tfinger.y * _generalGoodRealScreenHeight;
-							if(_foundY<singleBlockSize){
-								_isDone=1;
-							}else if  (_foundY<singleBlockSize*2){
-								free(_userInput);
-								_userInput=NULL;
-								_isDone=1;
-							}
-							break;
-					}
-				}
-
-				startDrawing();
-				drawRectangle(0,0,logicalScreenWidth,singleBlockSize,0,255,0,255);
-					drawString("Done",0,CONSTCHARW/2);
-				drawRectangle(0,singleBlockSize,logicalScreenWidth,singleBlockSize,255,0,0,255);
-					drawString("Cancel",0,CONSTCHARW/2+singleBlockSize);
-				drawRectangle(0,singleBlockSize*2,logicalScreenWidth,singleBlockSize,255,255,255,255);
-					drawString(_userInput,0,CONSTCHARW/2+singleBlockSize*2);
-				endDrawing();
-			}
-			SDL_StopTextInput();
-
-			controlsResetEmpty(); // Because we didn't catch the finger up or anything
+			char* _userInput = textInput(NULL," /?%*:|\\<>");
 			if (_userInput!=NULL){
 				char* _completeFilepath = getDataFilePath(_userInput);
 				free(_userInput);
@@ -1110,6 +1128,19 @@ void saveSong(char* _passedFilename){
 				}
 			}
 		}
+
+		fwrite(METADATAMARKER,strlen(METADATAMARKER),1,fp);
+		if (currentSongMetadata==NULL){
+			u8 _tempStoreLength=0;
+			fwrite(&_tempStoreLength,1,1,fp);
+		}else{
+			u8 _tempStoreLength = strlen(currentSongMetadata);
+			fwrite(&_tempStoreLength,1,1,fp);
+			if (fwrite(currentSongMetadata,1,strlen(currentSongMetadata),fp)!=_tempStoreLength){
+				printf("Error when writing metadata.\n");
+			}
+		}
+
 		fwrite(SAVEENDMARKER,strlen(SAVEENDMARKER),1,fp);
 		fclose(fp);
 	}else{
@@ -1132,7 +1163,22 @@ void uiSave(){
 void uiLoad(){
 	char* _chosenFile = selectLoadFile();
 	if (_chosenFile!=NULL){
-		loadSong(_chosenFile);
+		if ( !optionExitConfirmation || easyChoice("Really load?","No","Yes")){
+			free(currentSongMetadata);
+			currentSongMetadata=NULL;
+
+			char _returnCode = loadSong(_chosenFile);
+			if (_returnCode){
+				if (_returnCode==1){
+					easyMessage("Unknown file format");
+				}else if (_returnCode==2){
+					easyMessage("Could not open or find file.");
+				}else{
+					printf("Is %d\n",_returnCode);
+					easyMessage("Unknown bad loading return code.");
+				}
+			}
+		}
 	}
 	free(_chosenFile);
 }
@@ -1303,6 +1349,19 @@ void uiUIScroll(){
 	}
 }
 
+void uiMetadata(){
+	char* _newMetadata = textInput(currentSongMetadata!=NULL ? currentSongMetadata : "","");
+	if (_newMetadata!=NULL){
+		if (strlen(_newMetadata)>255){
+			easyMessage("Too long.");
+			free(_newMetadata);
+		}else{
+			free(currentSongMetadata);
+			currentSongMetadata = _newMetadata;
+		}
+	}
+}
+
 void uiSetMasterVolume(){
 	s8 _newVolume=-1;
 	do{
@@ -1328,6 +1387,7 @@ void uiCredits(){
 		drawString(__TIME__,0,CONSTCHARW*7);
 		endDrawing();
 	}
+	controlsResetEmpty();
 }
 
 void uiSettings(){
@@ -1410,7 +1470,7 @@ void uiBPM(){
 		bpm=getNumberInput("Input beats per minute.",bpm);
 	}while(bpm==0);
 	if (bpm<20 || bpm>200){
-		// LazyMessage("Too wierd for real Growtopia")
+		easyMessage("Warning: Growtopia BPM goes from 20-200.");
 	}
 }
 
@@ -2584,6 +2644,11 @@ void init(){
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/loadButton.png");
 	_newButton->activateFunc = uiLoad;
 	_newButton->uniqueId = U_LOAD;
+	//
+	_newButton = addUI();
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/metadataButton.png");
+	_newButton->activateFunc = uiMetadata;
+	_newButton->uniqueId = U_METADATA;
 	//
 	_newButton = addUI();
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/optionsButton.png");

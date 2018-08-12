@@ -16,6 +16,7 @@ enum uiID{
 	U_CREDITS,
 	U_LOAD,
 	U_KEYCONF,
+	U_METADATA,
 	//
 	U_BACK,
 	U_INFO,
@@ -45,6 +46,7 @@ typedef struct{
 	SDL_Keycode boundKey;
 }hotkeyConf;
 
+char easyChoice(char* _title, char* _redChoice, char* _greenChoice);
 void _addNumberInput(long* _outNumber, char* _outBuffer, int _addNumber);
 void _delNumberInput(long* _outNumber, char* _outBuffer);
 void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound, noteSpot** _passedSong);

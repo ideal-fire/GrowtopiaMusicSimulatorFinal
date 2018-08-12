@@ -139,7 +139,6 @@ void loadGMSrSong(FILE* fp){
 					_placeNoteLow(x,y,rollValue,0,songArray);
 					rollAmount--;
 				}
-	
 			}
 		}
 	}
@@ -307,11 +306,34 @@ void loadGMSFSong(FILE* fp){
 			}
 		}
 	}
+	// Load metadata
+	// But check for metadata marker first
 	char _possibleEndMagic[5];
 	_possibleEndMagic[4]='\0';
 	fread(_possibleEndMagic,4,1,fp);
+	if (strcmp(_possibleEndMagic,METADATAMARKER)!=0){
+		printf("Bad metadata marker.");
+		char i;
+		for (i=0;i<4;++i){
+			printf("%d\n",_possibleEndMagic[i]);
+		}
+		return;
+	}
+	// Now load it
+	u8 _readLength;
+	fread(&_readLength,1,1,fp);
+	if (_readLength!=0){
+		free(currentSongMetadata);
+		currentSongMetadata=malloc(_readLength+1);
+		fread(currentSongMetadata,_readLength,1,fp);
+		currentSongMetadata[_readLength]='\0';
+	}
+
+	// Check if we got to the end of the file okay
+	_possibleEndMagic[4]='\0';
+	fread(_possibleEndMagic,4,1,fp);
 	if (strcmp(_possibleEndMagic,SAVEENDMARKER)!=0){
-		printf("Bad end of file magic.");
+		printf("Bad end of file magic.\n");
 		char i;
 		for (i=0;i<4;++i){
 			printf("%d\n",_possibleEndMagic[i]);
@@ -319,7 +341,10 @@ void loadGMSFSong(FILE* fp){
 	}
 }
 
-void loadSong(char* _passedFilename){
+// 0 - ok
+// 1 - unknown format
+// 2 - file not found
+char loadSong(char* _passedFilename){
 	FILE* fp = fopen(_passedFilename,"rb");
 	if (fp!=NULL){
 		u8 _detectedFormat = FILE_FORMAT_UNKNOWN;
@@ -398,7 +423,8 @@ void loadSong(char* _passedFilename){
 		fseek(fp,0,SEEK_SET);
 		// Done detecting, load the file now.
 		if (_detectedFormat==FILE_FORMAT_UNKNOWN){
-			printf("Unknown Growtopia Music Simulator file format.\n");
+			fclose(fp);
+			return 1;
 		}else{
 			// Because we're loading we won't need the old song data
 			clearSong();
@@ -428,5 +454,8 @@ void loadSong(char* _passedFilename){
 			setSongXOffset(0); // Reloads display for song width too.
 		}
 		fclose(fp);
+		return 0;
+	}else{
+		return 2;
 	}
 }
