@@ -5,8 +5,7 @@ This code is free software.
 		Note: CC0 is not 20 pages and can be summarized in 3 words.
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code because i worked hard" For actual license, see LICENSE file.
 /////////////////////////////////////////////////////////////////////////////
-todo - add prompt text for text input
-	display it under the textbox to make it more possible for the user to be able to see the textbox when typing
+todo - easy note picker for mobile
 todo - Add icon to the exe
 	todo - Redo some of the more ugly icons, like BPM
 todo - script button
@@ -91,6 +90,10 @@ todo - script button
 #define UPDATEPASTE "E8h4z5yv"
 
 #define HUMANDOWNLOADPAGE "https://github.com/MyLegGuy/GrowtopiaMusicSimulatorFinal/releases"
+
+#define STUPID_NOTICE_1 "Some images & sounds are"
+#define STUPID_NOTICE_2 "assets by Ubisoft and"
+#define STUPID_NOTICE_3 "Growtopia. Some were modified."
 
 ////////////////////////////////////////////////
 #include "main.h"
@@ -578,7 +581,7 @@ char* fixFiletypeFilter(const char* _passedFilters){
 	return _returnString;
 }
 
-char* textInput(char* _initial, char* _restrictedCharacter){
+char* textInput(char* _initial, char* _restrictedCharacter, char* _prompt){
 	controlLoop();
 	int _maxChars;
 	if (_initial!=NULL){
@@ -659,6 +662,9 @@ char* textInput(char* _initial, char* _restrictedCharacter){
 			if (_userInput!=NULL){
 				drawString(_userInput,0,CONSTCHARW/2+singleBlockSize*2);
 			}
+		if (_prompt!=NULL){
+			drawString(_prompt,0,CONSTCHARW/2+singleBlockSize*3);
+		}
 		endDrawing();
 	}
 	SDL_StopTextInput();
@@ -676,7 +682,7 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 			removeNewline(_readLine);
 			return _readLine;
 		#else // Input for mobile
-			char* _userInput = textInput(NULL," /?%*:|\\<>");
+			char* _userInput = textInput(NULL," /?%*:|\\<>",_isSaveDialog ? "Save filename" : "Load filename");
 			if (_userInput!=NULL){
 				char* _completeFilepath = getDataFilePath(_userInput);
 				free(_userInput);
@@ -1351,7 +1357,7 @@ void uiUIScroll(){
 }
 
 void uiMetadata(){
-	char* _newMetadata = textInput(currentSongMetadata!=NULL ? currentSongMetadata : "","");
+	char* _newMetadata = textInput(currentSongMetadata!=NULL ? currentSongMetadata : "","","Song Metadata");
 	if (_newMetadata!=NULL){
 		if (strlen(_newMetadata)>255){
 			easyMessage("Too long.");
@@ -1386,6 +1392,11 @@ void uiCredits(){
 		drawString(VERSIONSTRING,0,CONSTCHARW*5);
 		drawString(__DATE__,0,CONSTCHARW*6);
 		drawString(__TIME__,0,CONSTCHARW*7);
+		if (isMobile){ // PC users can view license file directly
+			drawString(STUPID_NOTICE_1,0,CONSTCHARW*9);
+			drawString(STUPID_NOTICE_2,0,CONSTCHARW*10);
+			drawString(STUPID_NOTICE_3,0,CONSTCHARW*11);
+		}
 		endDrawing();
 	}
 	controlsResetEmpty();
