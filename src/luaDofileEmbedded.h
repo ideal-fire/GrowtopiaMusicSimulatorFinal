@@ -8,7 +8,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 */
 #ifndef NATHANSDLLUA
 #define NATHANSDLLUA
-	#include <Lua/lua.h>
+	#include <lua.h>
 
 	#ifndef OVERWRITEOLDMACRO
 		// If you want to replace the luaL_dofile macro with the SDL version.

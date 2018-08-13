@@ -26,9 +26,9 @@ todo - script button
 	#include <SDL2/SDL_net.h>
 #endif
 
-#include <Lua/lua.h>
-#include <Lua/lualib.h>
-#include <Lua/lauxlib.h>
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 
 #ifndef NO_FANCY_DIALOG
 	#if SUBPLATFORM == SUB_WINDOWS
@@ -573,6 +573,7 @@ char* fixFiletypeFilter(const char* _passedFilters){
 	for (i=0;i<_cachedListLength;++i){
 		freeNathanList(_fileTypes[i],1);
 	}
+	free(_fileTypes);
 	// Done
 	return _returnString;
 }
