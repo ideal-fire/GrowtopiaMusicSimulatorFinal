@@ -17,6 +17,7 @@ enum uiID{
 	U_LOAD,
 	U_KEYCONF,
 	U_METADATA,
+	U_THEME,
 	//
 	U_BACK,
 	U_INFO,

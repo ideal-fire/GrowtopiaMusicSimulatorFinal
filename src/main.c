@@ -5,9 +5,6 @@ This code is free software.
 		Note: CC0 is not 20 pages and can be summarized in 3 words.
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code because i worked hard" For actual license, see LICENSE file.
 /////////////////////////////////////////////////////////////////////////////
-todo - add easter egg.
-	idea - 1/100 startup change to ask question. if you answer correctly you unlock classic theme
-		hide classic theme in a archive file and use load png buffer command
 todo - script button
 */
 #include <stdio.h>
@@ -105,6 +102,7 @@ u8 optionDoCenterPlay=0;
 u8 optionExitConfirmation=1;
 u8 optionDoubleXAllowsExit=1; // If clicking the X button twice lets you exit even with the confirmation prompt up
 u8 optionUpdateCheck=1;
+s8 masterVolume=100;
 ////////////////////////////////////////////////
 // From libGeneralGood
 extern int _generalGoodRealScreenWidth;
@@ -195,8 +193,6 @@ int uiUIScrollIndex=-1;
 //extern SDL_Keycode lastSDLPressedKey;
 
 const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c'};
-
-s8 masterVolume=100;
 
 char* currentSongMetadata=NULL;
 
@@ -1489,7 +1485,15 @@ void uiBPM(){
 		bpm=getNumberInput("Input beats per minute.",bpm);
 	}while(bpm==0);
 	if (bpm<20 || bpm>200){
-		easyMessage("Warning: Growtopia BPM goes from 20-200.");
+		if (bpm==18){ // Easter egg
+			easyMessage("And remember.....decimals are friends, not numbers.");
+			if (backgroundMode==BGMODE_SINGLE){
+				freeTexture(bigBackground);
+				bigBackground = loadEmbeddedPNG("assets/Free/Images/pcBackgroundClassic.png");
+			}
+		}else{
+			easyMessage("Warning: Growtopia BPM goes from 20-200.");
+		}
 	}
 }
 
