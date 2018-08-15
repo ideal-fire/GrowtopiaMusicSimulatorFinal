@@ -5,9 +5,9 @@ This code is free software.
 		Note: CC0 is not 20 pages and can be summarized in 3 words.
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code because i worked hard" For actual license, see LICENSE file.
 /////////////////////////////////////////////////////////////////////////////
-todo - easy note picker for mobile
-todo - Add icon to the exe
-	todo - Redo some of the more ugly icons, like BPM
+todo - add easter egg.
+	idea - 1/100 startup change to ask question. if you answer correctly you unlock classic theme
+		hide classic theme in a archive file and use load png buffer command
 todo - script button
 */
 #include <stdio.h>
@@ -322,6 +322,7 @@ void saveSettings(){
 		fwrite(&optionExitConfirmation,sizeof(u8),1,fp);
 		fwrite(&optionDoubleXAllowsExit,sizeof(u8),1,fp);
 		fwrite(&optionUpdateCheck,sizeof(u8),1,fp);
+		fwrite(&masterVolume,sizeof(s8),1,fp);
 
 		fclose(fp);
 	}else{
@@ -345,6 +346,7 @@ void loadSettings(){
 			fread(&optionExitConfirmation,sizeof(u8),1,fp);
 			fread(&optionDoubleXAllowsExit,sizeof(u8),1,fp);
 			fread(&optionUpdateCheck,sizeof(u8),1,fp);
+			fread(&masterVolume,sizeof(s8),1,fp);
 		}
 		fclose(fp);
 	}
@@ -1010,7 +1012,11 @@ void centerAround(u32 _passedPosition){
 		}
 		setSongXOffset(_passedPosition-_halfScreenWidth);
 	}else{
-		setSongXOffset((_passedPosition/pageWidth)*pageWidth);
+		int _possibleNewOffset = (_passedPosition/pageWidth)*pageWidth;
+		if (_possibleNewOffset>songWidth-pageWidth){ // If we would go too far
+			_possibleNewOffset = songWidth-pageWidth;
+		}
+		setSongXOffset(_possibleNewOffset);
 	}
 }
 
@@ -1357,7 +1363,7 @@ void uiUIScroll(){
 }
 
 void uiMetadata(){
-	char* _newMetadata = textInput(currentSongMetadata!=NULL ? currentSongMetadata : "","","Song Metadata");
+	char* _newMetadata = textInput(currentSongMetadata!=NULL ? currentSongMetadata : "","","Song metadata");
 	if (_newMetadata!=NULL){
 		if (strlen(_newMetadata)>255){
 			easyMessage("Too long.");
@@ -1375,6 +1381,7 @@ void uiSetMasterVolume(){
 		_newVolume = getNumberInput("Master volume (1-100)",masterVolume);
 	}while(!(_newVolume>=0 && _newVolume<=100));
 	masterVolume = _newVolume;
+	saveSettings();
 }
 
 void uiCredits(){
@@ -1601,10 +1608,41 @@ void uiLeft(){
 }
 
 void uiNoteIcon(){
+	/*
 	uiNoteIndex++;
 	if (uiNoteIndex==totalNotes){
 		uiNoteIndex=0;
 	}
+	*/
+	while (1){
+		controlsStart();
+		if (wasJustPressed(SCE_TOUCH)){
+			int _fixedTouchY = touchY-globalDrawYOffset;
+			int _fixedTouchX = touchX-globalDrawXOffset;
+			int _noteId = (_fixedTouchX/singleBlockSize)+((logicalScreenHeight-_fixedTouchY)/singleBlockSize)*pageWidth;
+			if (_noteId<totalNotes){
+				uiNoteIndex = _noteId;
+			}
+			break;
+		}
+		controlsEnd();
+		startDrawing();
+		int i;
+		int _currentDrawY = logicalScreenHeight-singleBlockSize;
+		int _currentDrawX = 0;
+		for (i=0;i<totalNotes;++i){
+			drawTextureScale(noteImages[noteUIOrder[i]],_currentDrawX,_currentDrawY,generalScale,generalScale);
+			
+			_currentDrawX+=singleBlockSize;
+			if (_currentDrawX>=pageWidth*singleBlockSize){
+				_currentDrawY-=singleBlockSize;
+				_currentDrawX=0;
+			}
+		}
+		endDrawing();
+	}
+	controlsResetEmpty();
+
 	updateNoteIcon();
 }
 
@@ -2522,7 +2560,11 @@ char updateAvailable(){
 }
 
 void init(){
-	initGraphics(832,480,&screenWidth,&screenHeight);
+	#ifdef NEXUS_RES // Can test with resolution of Nexus 7 2012.
+		initGraphics(1280,800,&screenWidth,&screenHeight);
+	#else
+		initGraphics(832,480,&screenWidth,&screenHeight);
+	#endif
 	setWindowTitle("Growtopia Music Simulator Final");
 	setClearColor(192,192,192,255);
 	if (screenWidth!=832 || screenHeight!=480){
@@ -2681,10 +2723,12 @@ void init(){
 	volumeButtonUI.uniqueId=U_VOL;
 
 	//////////////////////////////
-	// Add the shared volume button to the main UI bar
-	uiElement* _slotForSharedVolume = addUI();
-	memcpy(_slotForSharedVolume,&volumeButtonUI,sizeof(uiElement));
-	_slotForSharedVolume->activateFunc=uiSetMasterVolume;
+	if (!isMobile){
+		// Add the shared volume button to the main UI bar when not on mobile
+		uiElement* _slotForSharedVolume = addUI();
+		memcpy(_slotForSharedVolume,&volumeButtonUI,sizeof(uiElement));
+		_slotForSharedVolume->activateFunc=uiSetMasterVolume;
+	}
 
 	// If we need more space for the UI because screen in small, add moreUI button
 	if (pageWidth<totalUI+3){ // 4 spaces for page number display. We only subtract 3 because we can use the labels on the far right as a UI spot
