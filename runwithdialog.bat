@@ -1,3 +1,3 @@
 cd bin
-a > a.txt
+GrowtopiaMusicSimulatorFinal.exe > a.txt
 cd ..

@@ -188,7 +188,8 @@ if (isMobile()) then
 	myBGPartyTableLabel = nil;
 else
 	-- Calling this changes the background mode.
-	setBigBg("assets/Free/Images/pcBackground.png");
+	--setBigBg("assets/Free/Images/pcBackground0.png");
+	loadTheme(getThemeIndex())
 end
 
 -- Add notes

@@ -6,6 +6,7 @@ This code is free software.
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code because i worked hard" For actual license, see LICENSE file.
 /////////////////////////////////////////////////////////////////////////////
 todo - script button
+todo - make text input more clear
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -92,6 +93,8 @@ todo - script button
 #define STUPID_NOTICE_2 "assets by Ubisoft and"
 #define STUPID_NOTICE_3 "Growtopia. Some were modified."
 
+#define THEME_FILENAME_FORMAT "assets/Free/Images/pcBackground%d.png"
+
 ////////////////////////////////////////////////
 #include "main.h"
 ////////////////////////////////////////////////
@@ -102,7 +105,8 @@ u8 optionDoCenterPlay=0;
 u8 optionExitConfirmation=1;
 u8 optionDoubleXAllowsExit=1; // If clicking the X button twice lets you exit even with the confirmation prompt up
 u8 optionUpdateCheck=1;
-s8 masterVolume=100;
+s8 masterVolume=25;
+u8 currentThemeIndex=0;
 ////////////////////////////////////////////////
 // From libGeneralGood
 extern int _generalGoodRealScreenWidth;
@@ -196,7 +200,34 @@ const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c
 
 char* currentSongMetadata=NULL;
 
+char unsavedChanges=0;
+
 ////////////////////////////////////////////////
+// -1 if failed, otherwise the index of the actually loaded theme
+int loadTheme(u8 _preferredIndex){
+	if (backgroundMode!=BGMODE_SINGLE){
+		return -1;
+	}
+	free(bigBackground);
+	bigBackground=NULL;
+
+	CrossTexture* _newBackground;
+	char _filenameBuffer[strlen(THEME_FILENAME_FORMAT)+4];
+	sprintf(_filenameBuffer,THEME_FILENAME_FORMAT,_preferredIndex);
+	_newBackground = loadEmbeddedPNG(_filenameBuffer);
+	if (_newBackground==NULL){
+		if (_preferredIndex!=0){
+			return loadTheme(0);
+		}else{
+			easyMessage("Could not load theme 0, this should be included with the program. Somebody goofed.");
+			return -1;
+		}
+	}else{
+		bigBackground = _newBackground;
+		return _preferredIndex;
+	}
+}
+
 // Code stolen from Happy Land.
 // Displays whatever message you want. Text will wrap.
 void easyMessage(char* _newMessage){
@@ -319,6 +350,7 @@ void saveSettings(){
 		fwrite(&optionDoubleXAllowsExit,sizeof(u8),1,fp);
 		fwrite(&optionUpdateCheck,sizeof(u8),1,fp);
 		fwrite(&masterVolume,sizeof(s8),1,fp);
+		fwrite(&currentThemeIndex,sizeof(u8),1,fp);
 
 		fclose(fp);
 	}else{
@@ -343,6 +375,7 @@ void loadSettings(){
 			fread(&optionDoubleXAllowsExit,sizeof(u8),1,fp);
 			fread(&optionUpdateCheck,sizeof(u8),1,fp);
 			fread(&masterVolume,sizeof(s8),1,fp);
+			fread(&currentThemeIndex,sizeof(u8),1,fp);
 		}
 		fclose(fp);
 	}
@@ -658,7 +691,11 @@ char* textInput(char* _initial, char* _restrictedCharacter, char* _prompt){
 		// Textbox
 		drawRectangle(0,singleBlockSize*2,logicalScreenWidth,singleBlockSize,255,255,255,255);
 			if (_userInput!=NULL){
-				drawString(_userInput,0,CONSTCHARW/2+singleBlockSize*2);
+				if (!isMobile && strlen(_userInput)==0){
+					drawString("(Type to input text)",0,CONSTCHARW/2+singleBlockSize*2);
+				}else{
+					drawString(_userInput,0,CONSTCHARW/2+singleBlockSize*2);
+				}
 			}
 		if (_prompt!=NULL){
 			drawString(_prompt,0,CONSTCHARW/2+singleBlockSize*3);
@@ -771,6 +808,8 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 				_foundCompletePath = _newPath;
 			}
 		}
+		controlsStart();
+		controlsEnd();
 		controlsResetEmpty(); // Because we didn't notice click up
 		return _foundCompletePath;
 	#endif
@@ -1105,7 +1144,7 @@ void playAtPosition(s32 _startPosition){
 }
 
 // Here we hard code the number of bytes to write because we want the same number of bytes on all systems so that save files are cross platform
-void saveSong(char* _passedFilename){
+char saveSong(char* _passedFilename){
 	FILE* fp = fopen(_passedFilename,"w");
 	if (fp!=NULL){
 		// Magic
@@ -1155,8 +1194,9 @@ void saveSong(char* _passedFilename){
 	}else{
 		easyMessage("Failed to open file.");
 		easyMessage(_passedFilename);
+		return 0;
 	}
-	return;
+	return 1;
 }
 
 #include "songLoaders.h"
@@ -1164,7 +1204,9 @@ void saveSong(char* _passedFilename){
 void uiSave(){
 	char* _chosenFile = selectSaveFile();
 	if (_chosenFile!=NULL){
-		saveSong(_chosenFile);
+		if (saveSong(_chosenFile)){
+			unsavedChanges=0;
+		}
 	}
 	free(_chosenFile);
 }
@@ -1186,6 +1228,9 @@ void uiLoad(){
 					printf("Is %d\n",_returnCode);
 					easyMessage("Unknown bad loading return code.");
 				}
+			}else{
+				// Song loading code sets this flag, unset it.
+				unsavedChanges=0;
 			}
 		}
 	}
@@ -1377,6 +1422,14 @@ void uiSetMasterVolume(){
 		_newVolume = getNumberInput("Master volume (1-100)",masterVolume);
 	}while(!(_newVolume>=0 && _newVolume<=100));
 	masterVolume = _newVolume;
+	saveSettings();
+	if (masterVolume>75){
+		easyMessage(">75 is earrape territory");
+	}
+}
+
+void uiTheme(){
+	currentThemeIndex = loadTheme(currentThemeIndex+1);
 	saveSettings();
 }
 
@@ -1699,7 +1752,12 @@ void drawImageScaleAlt(CrossTexture* _passedTexture, int _x, int _y, double _pas
 CrossTexture* loadEmbeddedPNG(const char* _passedFilename){
 	char* _fixedPathBuffer = malloc(strlen(_passedFilename)+strlen(getFixPathString(TYPE_EMBEDDED))+1);
 	fixPath((char*)_passedFilename,_fixedPathBuffer,TYPE_EMBEDDED);
-	CrossTexture* _loadedTexture = loadPNG(_fixedPathBuffer);
+	CrossTexture* _loadedTexture;
+	if (checkFileExist(_fixedPathBuffer)){
+		_loadedTexture = loadPNG(_fixedPathBuffer);
+	}else{
+		_loadedTexture = NULL;
+	}
 	free(_fixedPathBuffer);
 	return _loadedTexture;
 }
@@ -1763,13 +1821,14 @@ char easyChoice(char* _title, char* _redChoice, char* _greenChoice){
 		drawString(_greenChoice,logicalScreenWidth/2+logicalScreenWidth/4-CONSTCHARW*(strlen(_greenChoice)/2),_optionsDrawY);
 		endDrawing();
 	}
+	controlsResetEmpty();
 	return _returnValue;
 }
 
 char _inExitConfirmation=0;
 void XOutFunction(){
 	char _shouldExit=1;
-	if (!isMobile && optionExitConfirmation){
+	if (!isMobile && optionExitConfirmation && unsavedChanges){
 		if (_inExitConfirmation){
 			if (!optionDoubleXAllowsExit){
 				_shouldExit=0;
@@ -2069,6 +2128,16 @@ int L_setBPM(lua_State* passedState){
 	bpm = lua_tonumber(passedState,1);
 	return 0;
 }
+int L_getThemeIndex(lua_State* passedState){
+	lua_pushnumber(passedState,currentThemeIndex);
+	return 1;
+}
+int L_loadTheme(lua_State* passedState){
+	backgroundMode=BGMODE_SINGLE;
+	currentThemeIndex = lua_tonumber(passedState,1);
+	loadTheme(currentThemeIndex);
+	return 0;
+}
 void pushLuaFunctions(){
 	LUAREGISTER(L_addNote,"addNote");
 	LUAREGISTER(L_setBigBg,"setBigBg");
@@ -2083,6 +2152,8 @@ void pushLuaFunctions(){
 	LUAREGISTER(L_setSpecialID,"setSpecialID");
 	LUAREGISTER(L_setNoteGearData,"setGearInfo");
 	LUAREGISTER(L_swapNoteUIOrder,"swapNoteUIOrder");
+	LUAREGISTER(L_getThemeIndex,"getThemeIndex");
+	LUAREGISTER(L_loadTheme,"loadTheme");
 	//
 	LUAREGISTER(L_getSongWidth,"getSongWidth");
 	LUAREGISTER(L_getSongHeight,"getSongHeight");
@@ -2173,6 +2244,8 @@ void playColumn(s32 _columnNumber){
 	}
 }
 void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound, noteSpot** _passedSong){
+	unsavedChanges=1;
+
 	if (_passedSong[_y][_x].id==audioGearID){
 		free(_passedSong[_y][_x].extraData);
 	}
@@ -2426,17 +2499,20 @@ void audioGearGUI(u8* _gearData){
 				}
 			}else{
 				if (getUINoteID()==0 || extraNoteInfo[getUINoteID()].letter!=0){ // Restirct notes we can't use in audio gear to notes with audio gear letters or symbols
-					// Clear any other notes we have in the same column.
-					// Because 0 is a valid note id to place, clicking anywhere in a column with note id 0 will erase everything in that column
-					for (i=0;i<songHeight;++i){
-						_fakedMapArray[i][_placeX].id=0;
-					}
-					// Place our new note
-					_placeNoteLow(_placeX,_placeY+songYOffset,lastClickWasRight ? 0 : getUINoteID(),optionPlayOnPlace,_fakedMapArray);
-					
-					if (!isMobile){
-						free(_completeGearString);
-						_completeGearString = makeAudioGearString(_fakedMapArray);
+					if (_placeX<AUDIOGEARSPACE && _placeY<visiblePageHeight){
+						// Clear any other notes we have in the same column.
+						// Because 0 is a valid note id to place, clicking anywhere in a column with note id 0 will erase everything in that column
+						for (i=0;i<songHeight;++i){
+							_fakedMapArray[i][_placeX].id=0;
+						}
+
+						// Place our new note
+						_placeNoteLow(_placeX,_placeY+songYOffset,lastClickWasRight ? 0 : getUINoteID(),optionPlayOnPlace,_fakedMapArray);
+						
+						if (!isMobile){
+							free(_completeGearString);
+							_completeGearString = makeAudioGearString(_fakedMapArray);
+						}
 					}
 				}
 			}
@@ -2602,7 +2678,12 @@ void init(){
 	visiblePageHeight--; // Leave a space for the toolbar.
 	pageWidth = (logicalScreenWidth/singleBlockSize)-1;
 
-	initAudio();
+	//initAudio();
+	// Manually do SDL2_mixer audio init
+	SDL_Init( SDL_INIT_AUDIO );
+	Mix_OpenAudio( 44100, MIX_DEFAULT_FORMAT, 2, 2048 );
+	//Mix_Init(MIX_INIT_OGG);
+	//Mix_OpenAudio( 22050, MIX_DEFAULT_FORMAT, 1, 2048 );
 	Mix_AllocateChannels(14*4); // We need a lot of channels for all these music notes
 
 	makeDataDirectory();
@@ -2708,10 +2789,12 @@ void init(){
 	_newButton->activateFunc = uiMetadata;
 	_newButton->uniqueId = U_METADATA;
 	//
-	_newButton = addUI();
-	_newButton->image = loadEmbeddedPNG("assets/Free/Images/optionsButton.png");
-	_newButton->activateFunc = uiKeyConf;
-	_newButton->uniqueId = U_KEYCONF;
+	if (!isMobile){
+		_newButton = addUI();
+		_newButton->image = loadEmbeddedPNG("assets/Free/Images/optionsButton.png");
+		_newButton->activateFunc = uiKeyConf;
+		_newButton->uniqueId = U_KEYCONF;
+	}
 
 	// Three general use UI buttons
 	backButtonUI.image = loadEmbeddedPNG("assets/Free/Images/backButton.png");
@@ -2734,7 +2817,22 @@ void init(){
 		_slotForSharedVolume->activateFunc=uiSetMasterVolume;
 	}
 
+	// Run before so theme index is loaded
+	loadSettings();
+
+	// Very last, run the init script
+	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
+	goodLuaDofile(L,tempPathFixBuffer);
+
+	if (backgroundMode==BGMODE_SINGLE){
+		_newButton = addUI();
+		_newButton->image = loadEmbeddedPNG("assets/Free/Images/themeButton.png");
+		_newButton->activateFunc = uiTheme;
+		_newButton->uniqueId = U_THEME;
+	}
+
 	// If we need more space for the UI because screen in small, add moreUI button
+	// I guess it's actually better to run this after the init script anyway
 	if (pageWidth<totalUI+3){ // 4 spaces for page number display. We only subtract 3 because we can use the labels on the far right as a UI spot
 		uiPageSize=pageWidth-3;
 		uiScrollImage = loadEmbeddedPNG("assets/Free/Images/moreUI.png");
@@ -2754,11 +2852,7 @@ void init(){
 		uiPageSize=totalUI;
 	}
 
-	// Very last, run the init script
-	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
-	goodLuaDofile(L,tempPathFixBuffer);
-
-	loadSettings();
+	
 	// Load hotkey config here because all UI and notes should be added by now.
 	loadHotkeys();
 
@@ -2825,7 +2919,7 @@ int main(int argc, char *argv[]){
 					}
 				}
 			}else{ // If we click the main section
-				if (!(_placeX>=pageWidth || _placeX<0)){ // In bounds in the main section, I mean.
+				if (!(_placeX>=pageWidth || _placeX<0) && !(_placeY>=visiblePageHeight || _placeY<0)){ // In bounds in the main section, I mean.
 					if (!(_placeX==_lastPlaceX && _placeY==_lastPlaceY)){ // Don't place where we've just placed. Otherwise we'd be placing the same note on top of itself 60 times per second
 						_lastPlaceX = _placeX;
 						_lastPlaceY = _placeY;
