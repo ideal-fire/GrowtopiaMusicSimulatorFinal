@@ -220,6 +220,7 @@ int loadTheme(u8 _preferredIndex){
 			return loadTheme(0);
 		}else{
 			easyMessage("Could not load theme 0, this should be included with the program. Somebody goofed.");
+			easyMessage(_filenameBuffer);
 			return -1;
 		}
 	}else{
@@ -2199,6 +2200,7 @@ void goodPlaySound(CROSSSFX* _passedSound, int _volume){
 
 void playColumn(s32 _columnNumber){
 	if (_columnNumber>maxX){
+		resetPlayState();
 		_columnNumber=0;
 		currentPlayPosition=0;
 		nextPlayPosition=1;
