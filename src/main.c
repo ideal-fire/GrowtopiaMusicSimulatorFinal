@@ -6,11 +6,11 @@ This code is free software.
 	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code because i worked hard" For actual license, see LICENSE file.
 /////////////////////////////////////////////////////////////////////////////
 todo - script button
-todo - make text input more clear
 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <pthread.h>
 
 #include <GeneralGoodConfig.h>
 #include <GeneralGood.h>
@@ -203,6 +203,28 @@ char* currentSongMetadata=NULL;
 char unsavedChanges=0;
 
 ////////////////////////////////////////////////
+
+char* _currentTitlebar=NULL;
+void goodSetTitlebar(char* _newTitle, char _isModified){
+	if (_newTitle!=NULL){
+		free(_currentTitlebar);
+		_currentTitlebar = malloc(strlen(_newTitle)+2);
+		strcpy(_currentTitlebar,_newTitle);
+	}else{
+		if (_currentTitlebar==NULL){
+			goodSetTitlebar("GMSF",_isModified);
+			return;
+		}
+	}
+	if (_isModified){
+		addChar(_currentTitlebar,'*');
+		setWindowTitle(_currentTitlebar);
+		_currentTitlebar[strlen(_currentTitlebar)-1]='\0';
+	}else{
+		setWindowTitle(_currentTitlebar);
+	}
+}
+
 // -1 if failed, otherwise the index of the actually loaded theme
 int loadTheme(u8 _preferredIndex){
 	if (backgroundMode!=BGMODE_SINGLE){
@@ -753,6 +775,7 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 			ofn.nMaxFileTitle = 0;
 			ofn.lpstrInitialDir = NULL;
 			ofn.Flags = OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST ;
+			
 			if (_isSaveDialog){
 				if (GetSaveFileName( &ofn )!=0){
 					_didWork=1;
@@ -767,6 +790,10 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 			}else{
 				return NULL;
 			}
+			
+			GetCurrentDirectory(512,szFile);
+			printf("%s\n",szFile);
+			
 			// Now simpley display the file name 
 			//MessageBox ( NULL , ofn.lpstrFile , "File Name" , MB_OK);
 		#else
@@ -1206,6 +1233,7 @@ void uiSave(){
 	char* _chosenFile = selectSaveFile();
 	if (_chosenFile!=NULL){
 		if (saveSong(_chosenFile)){
+			goodSetTitlebar(NULL,0);
 			unsavedChanges=0;
 		}
 	}
@@ -1213,9 +1241,13 @@ void uiSave(){
 }
 
 void uiLoad(){
+	if (currentlyPlaying){
+		playAtPosition(0);
+	}
+	
 	char* _chosenFile = selectLoadFile();
 	if (_chosenFile!=NULL){
-		if ( !optionExitConfirmation || easyChoice("Really load?","No","Yes")){
+		if ( !optionExitConfirmation || !unsavedChanges || easyChoice("Really load?","No","Yes")){
 			free(currentSongMetadata);
 			currentSongMetadata=NULL;
 
@@ -1232,6 +1264,7 @@ void uiLoad(){
 			}else{
 				// Song loading code sets this flag, unset it.
 				unsavedChanges=0;
+				goodSetTitlebar(_chosenFile,0);
 			}
 		}
 	}
@@ -2246,8 +2279,6 @@ void playColumn(s32 _columnNumber){
 	}
 }
 void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound, noteSpot** _passedSong){
-	unsavedChanges=1;
-
 	if (_passedSong[_y][_x].id==audioGearID){
 		free(_passedSong[_y][_x].extraData);
 	}
@@ -2281,6 +2312,9 @@ void placeNote(int _x, int _y, u16 _noteId){
 			findMaxX();
 		}
 	}
+	
+	unsavedChanges=1;
+	goodSetTitlebar(NULL,1);
 }
 
 void drawPlayBar(int _x){
@@ -2641,13 +2675,13 @@ char updateAvailable(){
 	#endif
 }
 
-void init(){
+char init(){
 	#ifdef NEXUS_RES // Can test with resolution of Nexus 7 2012.
 		initGraphics(1280,800,&screenWidth,&screenHeight);
 	#else
 		initGraphics(832,480,&screenWidth,&screenHeight);
 	#endif
-	setWindowTitle("Growtopia Music Simulator Final");
+	goodSetTitlebar("Growtopia Music Simulator Final",0);
 	setClearColor(192,192,192,255);
 	if (screenWidth!=832 || screenHeight!=480){
 		isMobile=1;
@@ -2683,9 +2717,9 @@ void init(){
 	//initAudio();
 	// Manually do SDL2_mixer audio init
 	SDL_Init( SDL_INIT_AUDIO );
-	Mix_OpenAudio( 44100, MIX_DEFAULT_FORMAT, 2, 2048 );
+	//Mix_OpenAudio( 44100, MIX_DEFAULT_FORMAT, 2, 2048 );
+	Mix_OpenAudio( 22050, MIX_DEFAULT_FORMAT, 2, 1024 );
 	//Mix_Init(MIX_INIT_OGG);
-	//Mix_OpenAudio( 22050, MIX_DEFAULT_FORMAT, 1, 2048 );
 	Mix_AllocateChannels(14*4); // We need a lot of channels for all these music notes
 
 	makeDataDirectory();
@@ -2864,6 +2898,13 @@ void init(){
 	// After we've loaded settings
 	setSongXOffset(0);
 
+	// Fourth argument is data
+	pthread_t _soundPthread;
+	if(pthread_create(&_soundPthread, NULL, soundPlayerThread, NULL)) {
+		printf("Could not make sound thread.");
+		return 1;
+	}
+	
 	if (checkFileExist("./noupdate")==1){
 		optionUpdateCheck=0;
 	}
@@ -2880,6 +2921,30 @@ void init(){
 			easyMessage("Update available.");
 		}
 	}
+	
+	return 0;
+}
+void* soundPlayerThread(void* data){
+	
+	while(1){
+		// Process playing
+		if (currentlyPlaying){
+			u64 _new = getTicks();
+			// If our body is ready for the next column of notes
+			if (_new>=lastPlayAdvance+bpmFormula(bpm)){
+				//printf("%ld\n",_new-lastPlayAdvance+bpmFormula(bpm));
+				currentPlayPosition = nextPlayPosition;
+				nextPlayPosition = currentPlayPosition+1; // Advance one.
+				centerAround(currentPlayPosition); // Move camera
+				playColumn(currentPlayPosition);
+				lastPlayAdvance = getTicks(); // How long needs to pass before the next column
+			}
+		}
+		wait(1); // Low latency
+	}
+	
+	pthread_exit(NULL);
+	return NULL;
 }
 int main(int argc, char *argv[]){
 	printf("Loading...\n");
@@ -2937,18 +3002,6 @@ int main(int argc, char *argv[]){
 			}
 		}
 		controlsEnd();
-
-		// Process playing
-		if (currentlyPlaying){
-			// If our body is ready for the next column of notes
-			if (getTicks()>=lastPlayAdvance+bpmFormula(bpm)){
-				lastPlayAdvance = getTicks(); // How long needs to pass before the next column
-				currentPlayPosition = nextPlayPosition;
-				nextPlayPosition = currentPlayPosition+1; // Advance one.
-				centerAround(currentPlayPosition); // Move camera
-				playColumn(currentPlayPosition);
-			}
-		}
 
 		// Start drawing
 		startDrawing();

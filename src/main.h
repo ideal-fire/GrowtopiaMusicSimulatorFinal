@@ -47,6 +47,8 @@ typedef struct{
 	SDL_Keycode boundKey;
 }hotkeyConf;
 
+void* soundPlayerThread(void* data);
+void addChar(char* _sourceString, char _addChar);
 void easyMessage(char* _newMessage);
 char easyChoice(char* _title, char* _redChoice, char* _greenChoice);
 void _addNumberInput(long* _outNumber, char* _outBuffer, int _addNumber);
@@ -74,7 +76,7 @@ long getNumberInput(const char* _prompt, long _defaultNumber);
 uiElement* getUIByID(s16 _passedId);
 void goodLuaDofile(lua_State* passedState, char* _passedFilename);
 void goodPlaySound(CROSSSFX* _passedSound, int _volume);
-void init();
+char init();
 void int2str(char* _outBuffer, int _inNumber);
 char isBigEndian();
 int L_addNote(lua_State* passedState);
