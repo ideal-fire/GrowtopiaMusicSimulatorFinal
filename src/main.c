@@ -1675,6 +1675,10 @@ void uiDown(){
 }
 
 void uiRight(){
+	if (currentlyPlaying){
+		return;
+	}
+
 	if (songXOffset+pageWidth>songWidth-pageWidth){ // If we would go too far
 		if (songXOffset!=songWidth-pageWidth){
 			pageTransition(songWidth-pageWidth);
@@ -1686,6 +1690,10 @@ void uiRight(){
 	}
 }
 void uiLeft(){
+	if (currentlyPlaying){
+		return;
+	}
+
 	// Fix it if we're not on a mulitple of a page.
 	if (songXOffset%pageWidth!=0){
 		pageTransition((songXOffset/pageWidth)*pageWidth);
@@ -2718,7 +2726,7 @@ char init(){
 	// Manually do SDL2_mixer audio init
 	SDL_Init( SDL_INIT_AUDIO );
 	//Mix_OpenAudio( 44100, MIX_DEFAULT_FORMAT, 2, 2048 );
-	Mix_OpenAudio( 22050, MIX_DEFAULT_FORMAT, 2, 1024 );
+	Mix_OpenAudio( 22050, MIX_DEFAULT_FORMAT, 2, 100 ); // Keep sound buffer small, like 100! Otherwise it's bad.
 	//Mix_Init(MIX_INIT_OGG);
 	Mix_AllocateChannels(14*4); // We need a lot of channels for all these music notes
 
@@ -2949,7 +2957,10 @@ void* soundPlayerThread(void* data){
 int main(int argc, char *argv[]){
 	printf("Loading...\n");
 	uiNoteIndex=1;
-	init();
+	if (init()){
+		printf("Init error.");
+		return 1;
+	}
 	printf("Done loading.\n");
 
 	s16 _lastPlaceX=-1;
