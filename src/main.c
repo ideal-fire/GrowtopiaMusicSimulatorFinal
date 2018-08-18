@@ -1,10 +1,4 @@
 /*
-/////////////////////////////////////////////////////////////////////////////
-This code is free software.
-	Not "free" as in "lol, here's a 20 page license file even I've never read. if you modify my code, your code now belongs to the 20 page license file too. dont even think about using this code in a way that doesnt align with my ideology. its freedom, I promise"
-		Note: CC0 is not 20 pages and can be summarized in 3 words.
-	"Free" as in "Do whatever you want, just credit me if you decide to give out the source code because i worked hard" For actual license, see LICENSE file.
-/////////////////////////////////////////////////////////////////////////////
 todo - script button
 */
 #include <stdio.h>
