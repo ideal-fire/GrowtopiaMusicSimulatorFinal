@@ -238,3 +238,6 @@ addSingleNote("assets/Proprietary/Sound/festive_%d.wav",19,"assets/Proprietary/I
 
 -- Add guitar notes
 addTripleNotes("assets/Proprietary/Sound/spanish_guitar_%d.wav",20,"assets/Proprietary/Images/guitar.png","assets/Proprietary/Images/guitarSharp.png","assets/Proprietary/Images/guitarFlat.png",'G');
+
+-- Add violin notes
+addTripleNotes("assets/Proprietary/Sound/violin_%d.wav",23,"assets/Proprietary/Images/violin.png","assets/Proprietary/Images/violinSharp.png","assets/Proprietary/Images/violinFlat.png",'V');

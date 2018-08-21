@@ -35,8 +35,8 @@ todo - script button
 #include "nathanList.h"
 
 ///////////////////////////////////////
-#define VERSIONNUMBER 1
-#define VERSIONSTRING "v1.0"
+#define VERSIONNUMBER 2
+#define VERSIONSTRING "v1.1"
 //////////////////
 #define SETTINGSVERSION 1
 #define HOTKEYVERSION 1
@@ -407,8 +407,9 @@ void loadHotkeys(){
 		fread(&_tempReadVersion,sizeof(u8),1,fp);
 		if (_tempReadVersion>=1){
 			int i;
-			fread(&totalNotes,sizeof(u16),1,fp);
-			for (i=0;i<totalNotes;++i){
+			u16 _readTotalNotes;
+			fread(&_readTotalNotes,sizeof(u16),1,fp);
+			for (i=0;i<_readTotalNotes;++i){
 				fread(&(noteHotkeys[i]),sizeof(SDL_Keycode),1,fp);
 			}
 			u16 _readTotalUI;
