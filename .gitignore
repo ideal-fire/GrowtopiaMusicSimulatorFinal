@@ -5,3 +5,9 @@ vgcore*
 *.GMSF
 *.a
 bin/a.txt
+copytoandroiddir
+icon/bigicon.png
+_postConcept
+storeResources/
+triviaquiz
+dllStuff/
