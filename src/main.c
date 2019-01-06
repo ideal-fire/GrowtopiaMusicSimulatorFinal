@@ -35,8 +35,8 @@ todo - script button
 #include "nathanList.h"
 
 ///////////////////////////////////////
-#define VERSIONNUMBER 2
-#define VERSIONSTRING "v1.1"
+#define VERSIONNUMBER 3
+#define VERSIONSTRING "v1.3"
 //////////////////
 #define SETTINGSVERSION 1
 #define HOTKEYVERSION 1
