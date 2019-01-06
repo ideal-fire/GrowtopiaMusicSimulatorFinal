@@ -241,3 +241,6 @@ addTripleNotes("assets/Proprietary/Sound/spanish_guitar_%d.wav",20,"assets/Propr
 
 -- Add violin notes
 addTripleNotes("assets/Proprietary/Sound/violin_%d.wav",23,"assets/Proprietary/Images/violin.png","assets/Proprietary/Images/violinSharp.png","assets/Proprietary/Images/violinFlat.png",'V');
+
+-- Add lyre notes
+addTripleNotes("assets/Proprietary/Sound/lyre_%d.wav",26,"assets/Proprietary/Images/lyre.png","assets/Proprietary/Images/lyreSharp.png","assets/Proprietary/Images/lyreFlat.png",'L');
