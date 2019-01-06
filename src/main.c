@@ -329,7 +329,7 @@ char* getDataFilePath(const char* _passedFilename){
 
 void saveHotkeys(){
 	char* _settingsFilename = getDataFilePath("hotkeys.legSettings");
-	FILE* fp = fopen(_settingsFilename,"w");
+	FILE* fp = fopen(_settingsFilename,"wb");
 	if (fp!=NULL){
 		u8 _tempHoldVersion = HOTKEYVERSION;
 		fwrite(&_tempHoldVersion,sizeof(u8),1,fp);
@@ -354,7 +354,7 @@ void saveHotkeys(){
 
 void saveSettings(){
 	char* _settingsFilename = getDataFilePath("generalSettings.legSettings");
-	FILE* fp = fopen(_settingsFilename,"w");
+	FILE* fp = fopen(_settingsFilename,"wb");
 	if (fp!=NULL){
 		u8 _tempHoldVersion = SETTINGSVERSION;
 		fwrite(&_tempHoldVersion,sizeof(u8),1,fp);
@@ -379,7 +379,7 @@ void saveSettings(){
 
 void loadSettings(){
 	char* _settingsFilename = getDataFilePath("generalSettings.legSettings");
-	FILE* fp = fopen(_settingsFilename,"r");
+	FILE* fp = fopen(_settingsFilename,"rb");
 	if (fp!=NULL){
 		u8 _tempHoldVersion = SETTINGSVERSION;
 		fread(&_tempHoldVersion,sizeof(u8),1,fp);
@@ -401,7 +401,7 @@ void loadSettings(){
 
 void loadHotkeys(){
 	char* _settingsFilename = getDataFilePath("hotkeys.legSettings");
-	FILE* fp = fopen(_settingsFilename,"r");
+	FILE* fp = fopen(_settingsFilename,"rb");
 	if (fp!=NULL){
 		u8 _tempReadVersion = HOTKEYVERSION;
 		fread(&_tempReadVersion,sizeof(u8),1,fp);
@@ -1168,7 +1168,7 @@ void playAtPosition(s32 _startPosition){
 
 // Here we hard code the number of bytes to write because we want the same number of bytes on all systems so that save files are cross platform
 char saveSong(char* _passedFilename){
-	FILE* fp = fopen(_passedFilename,"w");
+	FILE* fp = fopen(_passedFilename,"wb");
 	if (fp!=NULL){
 		// Magic
 		fwrite(SAVEFORMATMAGIC,strlen(SAVEFORMATMAGIC),1,fp);
