@@ -1740,6 +1740,17 @@ void uiNoteIcon(){
 	updateNoteIcon();
 }
 
+void uiScriptButton(){
+	easyMessage("Warning:\nWith great power comes great responsibility.\n\nThis button lets you run scripts (code) written by people. User scripts can be harmful. Continue at your own risk.");
+	char* _chosenFile = sharedFilePicker(0,"Lua Script/lua,gmsflua;",0,NULL);
+	if (_chosenFile!=NULL){
+		if ( !optionExitConfirmation || (!unsavedChanges || easyChoice("Note - If the script crashes Growtopia Music Simulator Final, you'll lose your unsaved changes. Continue?","No","Yes"))){
+			goodLuaDofile(L,_chosenFile,0);
+		}
+	}
+	free(_chosenFile);
+}
+
 int fixX(int _x){
 	return _x+globalDrawXOffset;
 }
@@ -2175,6 +2186,10 @@ int L_loadTheme(lua_State* passedState){
 	loadTheme(currentThemeIndex);
 	return 0;
 }
+int L_easyMessage(lua_State* passedState){
+	easyMessage((char*)lua_tostring(passedState,1));
+	return 0;
+}
 void pushLuaFunctions(){
 	LUAREGISTER(L_addNote,"addNote");
 	LUAREGISTER(L_setBigBg,"setBigBg");
@@ -2207,6 +2222,7 @@ void pushLuaFunctions(){
 	LUAREGISTER(L_getNumberInput,"getNumberInput");
 	LUAREGISTER(L_getBPM,"getBPM");
 	LUAREGISTER(L_setBPM,"setBPM");
+	LUAREGISTER(L_easyMessage,"easyMessage");
 }
 
 void die(const char* message){
@@ -2214,9 +2230,13 @@ void die(const char* message){
   exit(EXIT_FAILURE);
 }
 
-void goodLuaDofile(lua_State* passedState, char* _passedFilename){
+void goodLuaDofile(lua_State* passedState, char* _passedFilename, char _doCrash){
 	if (luaL_dofile(passedState, _passedFilename) != LUA_OK) {
-		die(lua_tostring(L,-1));
+		if (_doCrash){
+			die(lua_tostring(L,-1));
+		}else{
+			printf("%s\n",lua_tostring(L,-1));
+		}
 	}
 }
 
@@ -2833,6 +2853,11 @@ char init(){
 		_newButton->image = loadEmbeddedPNG("assets/Free/Images/optionsButton.png");
 		_newButton->activateFunc = uiKeyConf;
 		_newButton->uniqueId = U_KEYCONF;
+
+		_newButton = addUI();
+		_newButton->image = loadEmbeddedPNG("assets/Free/Images/scriptButton.png");
+		_newButton->activateFunc = uiScriptButton;
+		_newButton->uniqueId = U_SCRIPTBUTTON;
 	}
 
 	// Three general use UI buttons
@@ -2861,7 +2886,7 @@ char init(){
 
 	// Very last, run the init script
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
-	goodLuaDofile(L,tempPathFixBuffer);
+	goodLuaDofile(L,tempPathFixBuffer,1);
 
 	if (backgroundMode==BGMODE_SINGLE){
 		_newButton = addUI();

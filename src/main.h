@@ -23,6 +23,7 @@ enum uiID{
 	U_INFO,
 	U_VOL,
 	//
+	U_SCRIPTBUTTON,
 	U_RESERVED // Always last
 };
 
@@ -74,7 +75,7 @@ int fixX(int _x);
 int fixY(int _y);
 long getNumberInput(const char* _prompt, long _defaultNumber);
 uiElement* getUIByID(s16 _passedId);
-void goodLuaDofile(lua_State* passedState, char* _passedFilename);
+void goodLuaDofile(lua_State* passedState, char* _passedFilename, char _doCrash);
 void goodPlaySound(CROSSSFX* _passedSound, int _volume);
 char init();
 void int2str(char* _outBuffer, int _inNumber);
