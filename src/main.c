@@ -260,12 +260,9 @@ int loadTheme(u8 _preferredIndex){
 	}
 }
 
-// Code stolen from Happy Land.
-// Displays whatever message you want. Text will wrap.
-void easyMessage(char* _newMessage){
-	char* currentTextboxMessage = malloc(strlen(_newMessage)+2);
-	strcpy(currentTextboxMessage,_newMessage);
-
+char* wrapText(char* _passedMessage){
+	char* currentTextboxMessage = malloc(strlen(_passedMessage)+2);
+	strcpy(currentTextboxMessage,_passedMessage);
 	// Step 1 - Put words into buffer with newlines
 	//////////////////////////////////////////////////////////////////
 	uint32_t _cachedMessageLength = strlen(currentTextboxMessage);
@@ -308,6 +305,28 @@ void easyMessage(char* _newMessage){
 			}
 		}
 	}
+	return currentTextboxMessage;
+}
+
+void drawWrappedText(char* _passedMessage, int _x, int _y){
+	// Note - this code is copied for easyChoice
+	int i;
+	int _currentDrawPosition=0;
+	for (i=0;;++i){
+		drawString(&(_passedMessage[_currentDrawPosition]),_x,_y+i*singleBlockSize);
+		_currentDrawPosition+=strlen(&(_passedMessage[_currentDrawPosition]));
+		if (_passedMessage[_currentDrawPosition+1]==BONUSENDCHARACTER){
+			break;
+		}else{
+			_currentDrawPosition++;
+		}
+	}
+}
+
+// Code stolen from Happy Land.
+// Displays whatever message you want. Text will wrap.
+void easyMessage(char* _newMessage){
+	char* currentTextboxMessage = wrapText(_newMessage);
 	//////////////////////////////////////////////////////////////////
 	// Step 2 - Display words
 	//////////////////////////////////////////////////////////////////
@@ -319,17 +338,7 @@ void easyMessage(char* _newMessage){
 		}
 		controlsEnd();
 		startDrawing();
-		int i;
-		int _currentDrawPosition=0;
-		for (i=0;;++i){
-			drawString(&(currentTextboxMessage[_currentDrawPosition]),0,i*singleBlockSize);
-			_currentDrawPosition+=strlen(&(currentTextboxMessage[_currentDrawPosition]));
-			if (currentTextboxMessage[_currentDrawPosition+1]==BONUSENDCHARACTER){
-				break;
-			}else{
-				_currentDrawPosition++;
-			}
-		}
+		drawWrappedText(currentTextboxMessage,0,0);
 		endDrawing();
 	}
 	free(currentTextboxMessage);
@@ -1318,7 +1327,7 @@ void uiSave(){
 				strcat(_tempString,_chosenFile);
 				char _choice = easyChoice(_tempString,"No","Yes");
 				free(_tempString);
-				if (_choice==1){
+				if (_choice==0){
 					return;
 				}
 			}
@@ -1839,7 +1848,7 @@ void uiScriptButton(){
 	easyMessage("Warning:\nWith great power comes great responsibility.\n\nThis button lets you run scripts (code) written by people. User scripts can be harmful. Continue at your own risk.");
 	char* _chosenFile = sharedFilePicker(0,"Lua Script/lua,gmsflua;",0,NULL);
 	if (_chosenFile!=NULL){
-		if ( !optionExitConfirmation || (!unsavedChanges || easyChoice("You have unsaved changes. Continue?","No","Yes"))){
+		if ( !optionExitConfirmation || (!unsavedChanges || easyChoice("You have unsaved changes. If this script crashes the application, you'll lose your progress. Continue?","No","Yes"))){
 			goodLuaDofile(L,_chosenFile,0);
 		}
 	}
@@ -1933,6 +1942,7 @@ char easyChoice(char* _title, char* _redChoice, char* _greenChoice){
 	char _isDone=0;
 	char _returnValue=0;
 	int _optionsDrawY = (logicalScreenHeight - CONSTCHARW*2)/2-(CONSTCHARW/2);
+	char* _wrappedMessage = wrapText(_title);
 	while(!_isDone){
 		controlsStart();
 		if (lastSDLPressedKey!=SDLK_UNKNOWN){
@@ -1958,7 +1968,19 @@ char easyChoice(char* _title, char* _redChoice, char* _greenChoice){
 		}
 		controlsEnd();
 		startDrawing();
-		drawString(_title,logicalScreenWidth/2-CONSTCHARW*(strlen(_title)/2),CONSTCHARW/2);
+		int i;
+		int _currentDrawPosition=0;
+		for (i=0;;++i){
+			drawString(&(_wrappedMessage[_currentDrawPosition]),logicalScreenWidth/2-bitmpTextWidth(&(_wrappedMessage[_currentDrawPosition]))/2,CONSTCHARW/2+i*singleBlockSize);
+			_currentDrawPosition+=strlen(&(_wrappedMessage[_currentDrawPosition]));
+			if (_wrappedMessage[_currentDrawPosition+1]==BONUSENDCHARACTER){
+				break;
+			}else{
+				_currentDrawPosition++;
+			}
+		}
+
+		//drawString(_title,logicalScreenWidth/2-CONSTCHARW*(strlen(_title)/2),CONSTCHARW/2);
 
 		drawRectangle(logicalScreenWidth/4-CONSTCHARW*(strlen(_redChoice)/2+1),_optionsDrawY-CONSTCHARW,CONSTCHARW*(strlen(_redChoice)+2),CONSTCHARW*3,255,53,53,255);
 		drawString(_redChoice,logicalScreenWidth/4-CONSTCHARW*(strlen(_redChoice)/2),_optionsDrawY);
@@ -1967,6 +1989,7 @@ char easyChoice(char* _title, char* _redChoice, char* _greenChoice){
 		drawString(_greenChoice,logicalScreenWidth/2+logicalScreenWidth/4-CONSTCHARW*(strlen(_greenChoice)/2),_optionsDrawY);
 		endDrawing();
 	}
+	free(_wrappedMessage);
 	controlsResetEmpty();
 	return _returnValue;
 }
