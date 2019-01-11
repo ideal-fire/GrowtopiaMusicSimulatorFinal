@@ -833,7 +833,9 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 				controlsResetEmpty();
 				freenList(_fileList,1);
 	
-				return _ret;
+				char* _realRet = getDataFilePath(_ret);
+				free(_ret);
+				return _realRet;
 			}
 		#endif
 	#else
@@ -1908,11 +1910,11 @@ CrossTexture* loadEmbeddedPNG(const char* _passedFilename){
 	char* _fixedPathBuffer = malloc(strlen(_passedFilename)+strlen(getFixPathString(TYPE_EMBEDDED))+1);
 	fixPath((char*)_passedFilename,_fixedPathBuffer,TYPE_EMBEDDED);
 	CrossTexture* _loadedTexture;
-	if (checkFileExist(_fixedPathBuffer)){
+	//if (checkFileExist(_fixedPathBuffer)){
 		_loadedTexture = loadPNG(_fixedPathBuffer);
-	}else{
-		_loadedTexture = NULL;
-	}
+	//}else{
+	//	_loadedTexture = NULL;
+	//}
 	free(_fixedPathBuffer);
 	return _loadedTexture;
 }
