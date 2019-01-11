@@ -125,3 +125,4 @@ void uiUp();
 void uiYellowPlay();
 void updateNoteIcon();
 void XOutFunction();
+void tempDrawImageSize(CrossTexture* _passedTexture, int _x, int _y, int _newWidth, int _newHeight);

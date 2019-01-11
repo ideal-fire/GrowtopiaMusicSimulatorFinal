@@ -1,6 +1,6 @@
 /*
-todo - script button
 */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -33,6 +33,7 @@ todo - script button
 #include "fonthelper.h"
 #include "luaDofileEmbedded.h"
 #include "nathanList.h"
+#include "goodLinkedList.h"
 
 ///////////////////////////////////////
 #define VERSIONNUMBER 3
@@ -124,6 +125,8 @@ SDL_Keycode* uiHotkeys=NULL;
 CrossTexture* playButtonImage;
 CrossTexture* stopButtonImage;
 CrossTexture* yellowPlayButtonImage;
+CrossTexture* upButtonImage;
+CrossTexture* downButtonImage;
 
 CrossTexture* uiScrollImage;
 
@@ -197,7 +200,19 @@ char* currentSongMetadata=NULL;
 char unsavedChanges=0;
 
 ////////////////////////////////////////////////
-
+int wrapNum(int _passed, int _min, int _max){
+	if (_passed>_max){
+		return _min+(_passed-_max-1);
+	}else if (_passed<_min){
+		return _max-(_min-_passed-1);
+	}
+	return _passed;
+}
+char* extraStrdup(char* _passed, int _extraSpace){
+	char* _ret = malloc(strlen(_passed)+_extraSpace+1);
+	strcpy(_ret,_passed);
+	return _ret;
+}
 char* _currentTitlebar=NULL;
 void goodSetTitlebar(char* _newTitle, char _isModified){
 	if (_newTitle!=NULL){
@@ -213,7 +228,7 @@ void goodSetTitlebar(char* _newTitle, char _isModified){
 	if (_isModified){
 		addChar(_currentTitlebar,'*');
 		setWindowTitle(_currentTitlebar);
-		_currentTitlebar[strlen(_currentTitlebar)-1]='\0';
+		_currentTitlebar[strlen(_currentTitlebar)-1]='\0'; // Prevent infinite stars
 	}else{
 		setWindowTitle(_currentTitlebar);
 	}
@@ -724,7 +739,8 @@ char* textInput(char* _initial, char* _restrictedCharacter, char* _prompt){
 	controlsResetEmpty(); // Because we didn't catch the finger up or anything
 	return _userInput;
 }
-
+#define MAXFILES 50
+#define MAXFILELENGTH 500
 char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceExtension, char* _forcedExtension){
 	#ifdef NO_FANCY_DIALOG
 		#ifdef MANUALPATHENTRY
@@ -735,13 +751,80 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 			removeNewline(_readLine);
 			return _readLine;
 		#else // Input for mobile
-			char* _userInput = textInput(NULL," /?%*:|\\<>",_isSaveDialog ? "Save filename" : "Load filename");
-			if (_userInput!=NULL){
-				char* _completeFilepath = getDataFilePath(_userInput);
-				free(_userInput);
-				return _completeFilepath;
+			if (_isSaveDialog){
+				char* _userInput = textInput(NULL," /?%*:|\\<>",_isSaveDialog ? "Save filename" : "Load filename");
+				if (_userInput!=NULL){
+					char* _completeFilepath = getDataFilePath(_userInput);
+					free(_userInput);
+					return _completeFilepath;
+				}else{
+					return NULL;
+				}
 			}else{
-				return NULL;
+				nList* _fileList = NULL;
+				CROSSDIR dir = openDirectory (getFixPathString(TYPE_DATA));
+				if (dirOpenWorked(dir)==0){
+					char* _tempString = extraStrdup("Failed to open directory. Ensure the app has permission access to your files.   ",strlen(getFixPathString(TYPE_DATA)));
+					strcat(_tempString,getFixPathString(TYPE_DATA));
+					easyMessage(_tempString);
+					free(_tempString);
+					return NULL;
+				}
+				CROSSDIRSTORAGE lastStorage;
+				while(directoryRead(&dir,&lastStorage)!=0){
+					addnList(&_fileList)->data = strdup(getDirectoryResultName(&lastStorage));
+				}
+				directoryClose (dir);
+	
+				int _selected=0;
+				int _drawXPos = logicalScreenWidth - logicalScreenWidth/9;
+				char* _ret=NULL;
+				while(1){
+					controlsStart();
+					if (wasJustPressed(SCE_TOUCH)){
+						if ((touchX-globalDrawXOffset)>=_drawXPos){
+							char _buttonPressed = (touchY-globalDrawYOffset)/((logicalScreenHeight/(double)6));
+							if (_buttonPressed<=1){
+								_selected = wrapNum(_selected-1,0,nListLen(_fileList)-1);
+							}else if (_buttonPressed<=3){
+								_selected = wrapNum(_selected+1,0,nListLen(_fileList)-1);
+							}else if (_buttonPressed==4){
+								_ret=strdup(getnList(_fileList,_selected)->data);
+								break;
+							}else{
+								break;
+							}
+						}
+					}
+					controlsEnd();
+					startDrawing();
+					tempDrawImageSize(upButtonImage,_drawXPos,0,logicalScreenWidth/9,(logicalScreenHeight/(double)6)*2);
+					tempDrawImageSize(downButtonImage,_drawXPos,(logicalScreenHeight/(double)6)*2,logicalScreenWidth/9,(logicalScreenHeight/(double)6)*2);
+					tempDrawImageSize(playButtonImage,_drawXPos,(logicalScreenHeight/(double)6)*4,logicalScreenWidth/9,(logicalScreenHeight/(double)6));
+					tempDrawImageSize(stopButtonImage,_drawXPos,(logicalScreenHeight/(double)6)*5,logicalScreenWidth/9,(logicalScreenHeight/(double)6));
+					
+					int _startDrawIndex;
+					if (_selected>(logicalScreenHeight/singleBlockSize)/2){
+						_startDrawIndex = _selected-(logicalScreenHeight/singleBlockSize)/2;
+					}else{
+						_startDrawIndex=0;
+					}
+					int i = _startDrawIndex;
+					int _currentDrawY = 0;
+					ITERATENLIST(getnList(_fileList,_startDrawIndex),{
+						if (i==_selected){
+							drawRectangle(0,_currentDrawY,strlen(_currentnList->data)*CONSTCHARW,singleBlockSize,0,255,0,255);
+						}
+						drawString(_currentnList->data,0,_currentDrawY);
+						_currentDrawY+=singleBlockSize;
+						++i;
+					})
+					endDrawing();
+				}
+				controlsResetEmpty();
+				freenList(_fileList,1);
+	
+				return _ret;
 			}
 		#endif
 	#else
@@ -1215,8 +1298,10 @@ char saveSong(char* _passedFilename){
 		fwrite(SAVEENDMARKER,strlen(SAVEENDMARKER),1,fp);
 		fclose(fp);
 	}else{
-		easyMessage("Failed to open file.");
-		easyMessage(_passedFilename);
+		char* _tempString = extraStrdup("Failed to open file. Please make sure the app has permission access to your files. ",strlen(_passedFilename));
+		strcat(_tempString,_passedFilename);
+		easyMessage(_tempString);
+		free(_tempString);
 		return 0;
 	}
 	return 1;
@@ -1227,6 +1312,17 @@ char saveSong(char* _passedFilename){
 void uiSave(){
 	char* _chosenFile = selectSaveFile();
 	if (_chosenFile!=NULL){
+		if (checkFileExist(_chosenFile)){
+			if (optionExitConfirmation){
+				char* _tempString = extraStrdup("Overwrite ",strlen(_chosenFile));
+				strcat(_tempString,_chosenFile);
+				char _choice = easyChoice(_tempString,"No","Yes");
+				free(_tempString);
+				if (_choice==1){
+					return;
+				}
+			}
+		}
 		if (saveSong(_chosenFile)){
 			goodSetTitlebar(NULL,0);
 			unsavedChanges=0;
@@ -1489,11 +1585,11 @@ void uiCredits(){
 
 void uiSettings(){
 	controlLoop(); // Because we're coming from the middle of a control loop.
-	u8 _totalSettings=5;
+	u8 _totalSettings=6;
 
 	// No exit confirmations on mobile, so no need for those settings
 	if (!isMobile){
-		_totalSettings+=2;
+		_totalSettings+=1;
 	}
 
 	char* _settingsText[_totalSettings];
@@ -1509,10 +1605,9 @@ void uiSettings(){
 		_settingsValues[3]=&optionDoCenterPlay;
 	_settingsText[4]="Check for updates";
 		_settingsValues[4]=&optionUpdateCheck;
-
+	_settingsText[5]="Confirmation";
+		_settingsValues[5]=&optionExitConfirmation;
 	if (!isMobile){
-		_settingsText[_totalSettings-2]="Exit confirmation";
-			_settingsValues[_totalSettings-2]=&optionExitConfirmation;
 		_settingsText[_totalSettings-1]="Double X allows confirmation override";
 			_settingsValues[_totalSettings-1]=&optionDoubleXAllowsExit;
 	}
@@ -1744,7 +1839,7 @@ void uiScriptButton(){
 	easyMessage("Warning:\nWith great power comes great responsibility.\n\nThis button lets you run scripts (code) written by people. User scripts can be harmful. Continue at your own risk.");
 	char* _chosenFile = sharedFilePicker(0,"Lua Script/lua,gmsflua;",0,NULL);
 	if (_chosenFile!=NULL){
-		if ( !optionExitConfirmation || (!unsavedChanges || easyChoice("Note - If the script crashes Growtopia Music Simulator Final, you'll lose your unsaved changes. Continue?","No","Yes"))){
+		if ( !optionExitConfirmation || (!unsavedChanges || easyChoice("You have unsaved changes. Continue?","No","Yes"))){
 			goodLuaDofile(L,_chosenFile,0);
 		}
 	}
@@ -1791,6 +1886,9 @@ void setSongWidth(noteSpot** _passedArray, u16 _passedOldWidth, u16 _passedWidth
 	}
 }
 
+void tempDrawImageSize(CrossTexture* _passedTexture, int _x, int _y, int _newWidth, int _newHeight){
+	drawTextureScale(_passedTexture,_x,_y,_newWidth/(double)getTextureWidth(_passedTexture),_newHeight/(double)getTextureHeight(_passedTexture));
+}
 void drawImageScaleAlt(CrossTexture* _passedTexture, int _x, int _y, double _passedXScale, double _passedYScale){
 	if (_passedTexture!=NULL){
 		drawTextureScale(_passedTexture,_x,_y,_passedXScale,_passedYScale);
@@ -2794,13 +2892,15 @@ char init(){
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/rightButton.png");
 	_newButton->activateFunc = uiRight;
 	_newButton->uniqueId = U_RIGHT;
+	upButtonImage = loadEmbeddedPNG("assets/Free/Images/upButton.png");
+	downButtonImage = loadEmbeddedPNG("assets/Free/Images/downButton.png");
 	if (visiblePageHeight!=pageHeight){
 		_newButton = addUI();
-		_newButton->image = loadEmbeddedPNG("assets/Free/Images/upButton.png");
+		_newButton->image = upButtonImage;
 		_newButton->activateFunc = uiUp;
 		_newButton->uniqueId = U_UPBUTTON;
 		_newButton = addUI();
-		_newButton->image = loadEmbeddedPNG("assets/Free/Images/downButton.png");
+		_newButton->image = downButtonImage;
 		_newButton->activateFunc = uiDown;
 		_newButton->uniqueId = U_DOWNBUTTON;
 	}

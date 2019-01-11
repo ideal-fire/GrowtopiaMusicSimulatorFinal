@@ -1,3 +1,3 @@
 cd src
-gcc main.c fonthelper.c nathanList.c -Wall -Wno-char-subscripts -g -I ../../GeneralGood/Include -L../lib -lpthread -lnfd `pkg-config --cflags --libs gtk+-3.0` -lgeneralgoodlinux -llua -lSDL2main -lSDL2 -lSDL2_net -lSDL2_image -lSDL2_mixer -lm -o ./../bin/GrowtopiaMusicSimulatorFinal.exe
+gcc main.c fonthelper.c nathanList.c goodLinkedList.c -Wall -Wno-char-subscripts -g -I ../../GeneralGood/Include -L../lib -lpthread -lnfd `pkg-config --cflags --libs gtk+-3.0` -lgeneralgoodlinux -llua -lSDL2main -lSDL2 -lSDL2_net -lSDL2_image -lSDL2_mixer -lm -o ./../bin/GrowtopiaMusicSimulatorFinal.exe
 cd ..
