@@ -127,6 +127,7 @@ CrossTexture* stopButtonImage;
 CrossTexture* yellowPlayButtonImage;
 CrossTexture* upButtonImage;
 CrossTexture* downButtonImage;
+CrossTexture* newButtonImage;
 
 CrossTexture* uiScrollImage;
 
@@ -760,66 +761,71 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 			removeNewline(_readLine);
 			return _readLine;
 		#else // Input for mobile
-			if (_isSaveDialog){
-				char* _userInput = textInput(NULL," /?%*:|\\<>",_isSaveDialog ? "Save filename" : "Load filename");
-				if (_userInput!=NULL){
-					char* _completeFilepath = getDataFilePath(_userInput);
-					free(_userInput);
-					return _completeFilepath;
-				}else{
-					return NULL;
-				}
-			}else{
-				nList* _fileList = NULL;
-				CROSSDIR dir = openDirectory (getFixPathString(TYPE_DATA));
-				if (dirOpenWorked(dir)==0){
-					char* _tempString = extraStrdup("Failed to open directory. Ensure the app has permission access to your files.   ",strlen(getFixPathString(TYPE_DATA)));
-					strcat(_tempString,getFixPathString(TYPE_DATA));
-					easyMessage(_tempString);
-					free(_tempString);
-					return NULL;
-				}
-				CROSSDIRSTORAGE lastStorage;
-				while(directoryRead(&dir,&lastStorage)!=0){
-					addnList(&_fileList)->data = strdup(getDirectoryResultName(&lastStorage));
-				}
-				directoryClose (dir);
+			nList* _fileList = NULL;
+			CROSSDIR dir = openDirectory (getFixPathString(TYPE_DATA));
+			if (dirOpenWorked(dir)==0){
+				char* _tempString = extraStrdup("Failed to open directory. Ensure the app has permission access to your files.   ",strlen(getFixPathString(TYPE_DATA)));
+				strcat(_tempString,getFixPathString(TYPE_DATA));
+				easyMessage(_tempString);
+				free(_tempString);
+				return NULL;
+			}
+			CROSSDIRSTORAGE lastStorage;
+			while(directoryRead(&dir,&lastStorage)!=0){
+				addnList(&_fileList)->data = strdup(getDirectoryResultName(&lastStorage));
+			}
+			directoryClose (dir);
 	
-				int _selected=0;
-				int _drawXPos = logicalScreenWidth - logicalScreenWidth/9;
-				char* _ret=NULL;
-				while(1){
-					controlsStart();
-					if (wasJustPressed(SCE_TOUCH)){
-						if ((touchX-globalDrawXOffset)>=_drawXPos){
-							char _buttonPressed = (touchY-globalDrawYOffset)/((logicalScreenHeight/(double)6));
-							if (_buttonPressed<=1){
-								_selected = wrapNum(_selected-1,0,nListLen(_fileList)-1);
-							}else if (_buttonPressed<=3){
-								_selected = wrapNum(_selected+1,0,nListLen(_fileList)-1);
-							}else if (_buttonPressed==4){
+			int _selected=0;
+			int _drawXPos = logicalScreenWidth - logicalScreenWidth/9;
+			double _singleHeight = (logicalScreenHeight/(double)6);
+			int _singleWidth = logicalScreenWidth/9;
+			char* _ret=NULL;
+			while(1){
+				controlsStart();
+				if (wasJustPressed(SCE_TOUCH)){
+					int _fixedTouchX = (touchX-globalDrawXOffset);
+					int _fixedTouchY = (touchY-globalDrawYOffset);
+					if (_fixedTouchX>=_drawXPos){
+						char _buttonPressed = _fixedTouchY/_singleHeight;
+						if (_buttonPressed<=1){
+							_selected = wrapNum(_selected-1,0,nListLen(_fileList)-1);
+						}else if (_buttonPressed<=3){
+							_selected = wrapNum(_selected+1,0,nListLen(_fileList)-1);
+						}else if (_buttonPressed==4){
+							if (_fileList!=NULL){
 								_ret=strdup(getnList(_fileList,_selected)->data);
-								break;
-							}else{
-								break;
 							}
+							break;
+						}else{
+							break;
+						}
+					}else if (_isSaveDialog && _fixedTouchX<_drawXPos && _fixedTouchY>logicalScreenHeight-_singleHeight){
+						_ret = textInput(NULL," /?%*:|\\<>",_isSaveDialog ? "Save filename" : "Load filename");
+						if (_ret!=NULL){
+							break;
 						}
 					}
-					controlsEnd();
-					startDrawing();
-					tempDrawImageSize(upButtonImage,_drawXPos,0,logicalScreenWidth/9,(logicalScreenHeight/(double)6)*2);
-					tempDrawImageSize(downButtonImage,_drawXPos,(logicalScreenHeight/(double)6)*2,logicalScreenWidth/9,(logicalScreenHeight/(double)6)*2);
-					tempDrawImageSize(playButtonImage,_drawXPos,(logicalScreenHeight/(double)6)*4,logicalScreenWidth/9,(logicalScreenHeight/(double)6));
-					tempDrawImageSize(stopButtonImage,_drawXPos,(logicalScreenHeight/(double)6)*5,logicalScreenWidth/9,(logicalScreenHeight/(double)6));
-					
-					int _startDrawIndex;
-					if (_selected>(logicalScreenHeight/singleBlockSize)/2){
-						_startDrawIndex = _selected-(logicalScreenHeight/singleBlockSize)/2;
-					}else{
-						_startDrawIndex=0;
-					}
-					int i = _startDrawIndex;
-					int _currentDrawY = 0;
+				}
+				controlsEnd();
+				startDrawing();
+				tempDrawImageSize(upButtonImage,_drawXPos,0,_singleWidth,_singleHeight*2);
+				tempDrawImageSize(downButtonImage,_drawXPos,_singleHeight*2,_singleWidth,_singleHeight*2);
+				tempDrawImageSize(playButtonImage,_drawXPos,_singleHeight*4,_singleWidth,_singleHeight);
+				tempDrawImageSize(stopButtonImage,_drawXPos,_singleHeight*5,_singleWidth,_singleHeight);
+				if (_isSaveDialog){
+					tempDrawImageSize(newButtonImage,0,logicalScreenHeight-_singleHeight,_singleWidth,_singleHeight);
+				}
+
+				int _startDrawIndex;
+				if (_selected>(logicalScreenHeight/singleBlockSize)/2){
+					_startDrawIndex = _selected-(logicalScreenHeight/singleBlockSize)/2;
+				}else{
+					_startDrawIndex=0;
+				}
+				int i = _startDrawIndex;
+				int _currentDrawY = 0;
+				if (_fileList!=NULL){
 					ITERATENLIST(getnList(_fileList,_startDrawIndex),{
 						if (i==_selected){
 							drawRectangle(0,_currentDrawY,strlen(_currentnList->data)*CONSTCHARW,singleBlockSize,0,255,0,255);
@@ -828,15 +834,24 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 						_currentDrawY+=singleBlockSize;
 						++i;
 					})
-					endDrawing();
+				}else{
+					// Highlight select button in red
+					drawRectangle(_drawXPos,(logicalScreenHeight/(double)6)*4,logicalScreenWidth/9,(logicalScreenHeight/(double)6),255,0,0,127);
+					drawString("No files",0,0);
 				}
-				controlsResetEmpty();
-				freenList(_fileList,1);
-	
+				endDrawing();
+			}
+			controlsResetEmpty();
+			freenList(_fileList,1);
+			
+			if (_ret!=NULL){
 				char* _realRet = getDataFilePath(_ret);
 				free(_ret);
 				return _realRet;
+			}else{
+				return NULL;
 			}
+			
 		#endif
 	#else
 		char* _fixedFilterlist = fixFiletypeFilter(_filterList);
@@ -2997,6 +3012,8 @@ char init(){
 	volumeButtonUI.image = loadEmbeddedPNG("assets/Free/Images/volumeButton.png");
 	volumeButtonUI.activateFunc=NULL;
 	volumeButtonUI.uniqueId=U_VOL;
+
+	newButtonImage = loadEmbeddedPNG("assets/Free/Images/newButton.png");
 
 	//////////////////////////////
 	if (!isMobile){
