@@ -39,12 +39,12 @@
 #define VERSIONNUMBER 3
 #define VERSIONSTRING "v1.3"
 //////////////////
-#define SETTINGSVERSION 2
+#define SETTINGSVERSION 3
 #define HOTKEYVERSION 1
 #define SONGFORMATVERSION 1
 ///////////////////////////////////////
 
-#define ISTESTINGMOBILE 0
+#define ISTESTINGMOBILE 1
 #define DISABLESOUND 0
 
 #define u8 uint8_t
@@ -103,7 +103,7 @@ u8 optionDoFancyPage=1;
 u8 optionDoCenterPlay=0;
 u8 optionExitConfirmation=1;
 u8 optionDoubleXAllowsExit=1; // If clicking the X button twice lets you exit even with the confirmation prompt up
-u8 optionUpdateCheck=1;
+u8 optionUpdateCheck=0;
 s8 masterVolume=25;
 u8 currentThemeIndex=0;
 u8 useAltDataDirectory=0;
@@ -137,7 +137,7 @@ CrossTexture* uiScrollImage;
 u16 songWidth=400;
 u16 songHeight=14;
 
-double generalScale;
+double generalScale=-1;
 
 u16 singleBlockSize=32;
 
@@ -443,6 +443,7 @@ void saveSettings(){
 		fwrite(&masterVolume,sizeof(s8),1,fp);
 		fwrite(&currentThemeIndex,sizeof(u8),1,fp);
 		fwrite(&useAltDataDirectory,sizeof(u8),1,fp);
+		fwrite(&generalScale,sizeof(double),1,fp);
 
 		fclose(fp);
 	}else{
@@ -470,6 +471,9 @@ char loadSettings(char* _passedPath){
 		}
 		if (_tempHoldVersion>=2){
 			fread(&useAltDataDirectory,sizeof(u8),1,fp);
+		}
+		if (_tempHoldVersion>=3){
+			fread(&generalScale,sizeof(double),1,fp);
 		}
 		fclose(fp);
 	}else{
@@ -1950,6 +1954,7 @@ void uiScriptButton(){
 void uiZoomIn(){
 	if (updateGeneralScale(generalScale+ZOOMINCREMENT,0)==0){
 		generalScale+=ZOOMINCREMENT;
+		saveSettings();
 	}else{
 		updateGeneralScale(generalScale,1);
 	}
@@ -1958,6 +1963,7 @@ void uiZoomIn(){
 void uiZoomOut(){
 	if ((updateGeneralScale(generalScale-ZOOMINCREMENT,0)==0) && singleBlockSize>20){
 		generalScale-=ZOOMINCREMENT;
+		saveSettings();
 	}else{
 		updateGeneralScale(generalScale,0);
 	}
@@ -2632,7 +2638,7 @@ void drawUIPointers(uiElement** _passedUIBar, int _totalLength){
 
 void drawUIBar(uiElement* _passedUIBar){
 	int i;
-	for (i=uiScrollOffset;i<uiPageSize+uiScrollOffset;++i){
+	for (i=uiScrollOffset;i<uiScrollOffset+uiPageSize;++i){
 		if (i==totalUI){
 			break;
 		}
@@ -2949,14 +2955,6 @@ char updateGeneralScale(double _passed, char _isForced){
 	visiblePageHeight--; // Leave a space for the toolbar.
 	pageWidth = (logicalScreenWidth/singleBlockSize)-1;
 
-	if (!_isForced){
-		if ((totalUI+4)/2>=pageWidth){
-			return 1;
-		}else if (singleBlockSize<20){
-			return 2;
-		}
-	}
-
 	int _rightButtonIndex = getUIIndexByID(U_RIGHT);
 	if (visiblePageHeight!=pageHeight){
 		if (myUIBar[_rightButtonIndex+1].uniqueId!=U_UPBUTTON){
@@ -2967,7 +2965,7 @@ char updateGeneralScale(double _passed, char _isForced){
 
 	uiPageSize=totalUI;
 	// If we need more space for the UI because screen in small, add moreUI button
-	// We'll be moving the button or removing it, so get rid of it either way
+	// We'll be moving the more UI button or removing it, so get rid of it either way
 	if (getUIIndexByID(U_MOREUIBUTTON)!=-1){
 		deleteUI(getUIIndexByID(U_MOREUIBUTTON));
 	}
@@ -2986,6 +2984,15 @@ char updateGeneralScale(double _passed, char _isForced){
 	}else{
 		uiScrollOffset=0;
 	}
+
+	if (!_isForced){
+		if (ceil((totalUI+(getUIIndexByID(U_MOREUIBUTTON)!=-1)+5)/2)>=pageWidth){
+			return 1;
+		}else if (singleBlockSize<20){
+			return 2;
+		}
+	}
+
 	return 0;
 }
 
@@ -3171,12 +3178,6 @@ char init(){
 
 	//////////////////////////////
 
-	generalScale = tryUpdateGeneralScale(isMobile ? 1.7 : 1);
-	if (generalScale<0){
-		updateGeneralScale(1,1);
-		generalScale=1;
-	}
-
 	// Run before so theme index is loaded
 	// First, try and load from safe data path
 	char* _settingsFilename = fixSafeDataPath("generalSettings.legSettings");
@@ -3185,7 +3186,7 @@ char init(){
 	if (!_didLoadedSettings){
 		// Failed to find settings in safe location, try alt
 		if (directoryExists(getAltDataPath())){
-			easyMessage("Welcome to v1.3!");
+			//easyMessage("Welcome to v1.3!");
 			useAltDataDirectory=1;
 			// Optionally transfer their settings file to the new location
 			_settingsFilename = fixAltDataPath("generalSettings.legSettings");
@@ -3195,10 +3196,16 @@ char init(){
 			free(_settingsFilename);
 		}else{
 			// This is their first run
-			easyMessage("Welcome to Growtopia Music Simulator Final!");
+			//easyMessage("Welcome to Growtopia Music Simulator Final!");
 		}
 		// Save settings here so the useAltDataDirectory is saved or so the welcome message isn't shown every time
 		saveSettings();
+	}
+
+	generalScale = tryUpdateGeneralScale(generalScale!=-1 ? generalScale : (isMobile ? 1.7 : 1));
+	if (generalScale<0){
+		updateGeneralScale(1,1);
+		generalScale=1;
 	}
 
 	// Very last, run the init script
