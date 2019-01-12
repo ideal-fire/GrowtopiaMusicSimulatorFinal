@@ -39,7 +39,7 @@
 #define VERSIONNUMBER 3
 #define VERSIONSTRING "v1.3"
 //////////////////
-#define SETTINGSVERSION 1
+#define SETTINGSVERSION 2
 #define HOTKEYVERSION 1
 #define SONGFORMATVERSION 1
 ///////////////////////////////////////
@@ -89,6 +89,9 @@
 #define STUPID_NOTICE_2 "assets by Ubisoft and"
 #define STUPID_NOTICE_3 "Growtopia. Some were modified."
 
+#define CANTOPENMESSAGE "Maybe you need to enable stroage permission or turn off alt song location."
+//#define NOSTROAGEWARNING "Ensure the app has permission access to your files. To do this, go to the app's info, go to the permissions menu, and turn storage on."
+
 #define THEME_FILENAME_FORMAT "assets/Free/Images/pcBackground%d.png"
 
 ////////////////////////////////////////////////
@@ -103,6 +106,7 @@ u8 optionDoubleXAllowsExit=1; // If clicking the X button twice lets you exit ev
 u8 optionUpdateCheck=1;
 s8 masterVolume=25;
 u8 currentThemeIndex=0;
+u8 useAltDataDirectory=0;
 ////////////////////////////////////////////////
 // From libGeneralGood
 extern int _generalGoodRealScreenWidth;
@@ -203,6 +207,46 @@ char* currentSongMetadata=NULL;
 char unsavedChanges=0;
 
 ////////////////////////////////////////////////
+char* fixSafeDataPath(char* _passedPath){
+	char* _fixedPathBuffer = malloc(strlen(_passedPath)+strlen(getFixPathString(TYPE_DATA))+1);
+	fixPath((char*)_passedPath,_fixedPathBuffer,TYPE_DATA);
+	return _fixedPathBuffer;
+}
+char* getAltDataPath(){
+	#if SUBPLATFORM == SUB_ANDROID
+		return "/sdcard/GMSF/";
+	#else
+		return getFixPathString(TYPE_DATA);
+	#endif
+}
+char* fixAltDataPath(char* _passedPath){
+	#if SUBPLATFORM == SUB_ANDROID
+		char* _retBuffer = malloc(strlen(getAltDataPath())+strlen(_passedPath)+1);
+		strcpy(_retBuffer,getAltDataPath());
+		strcat(_retBuffer,_passedPath);
+		return _retBuffer;
+	#else
+		return fixSafeDataPath(_passedPath);
+	#endif
+}
+char* getDynamicDataPath(){
+	return useAltDataDirectory ? getAltDataPath() : getFixPathString(TYPE_DATA);
+}
+char* fixDynamicDataPath(char* _passedPath){
+	return useAltDataDirectory ? fixAltDataPath(_passedPath) : fixSafeDataPath(_passedPath);
+}
+char canWriteAltDataPath(){
+	char* _tempPath = fixAltDataPath("ifyouseethistestfilesomethinghasgoneveryrong");
+	FILE* fp = fopen(_tempPath,"wb");
+	if (fp!=NULL){
+		fclose(fp);
+		remove(_tempPath);
+		return 1;
+	}else{
+		return 0;
+	}
+}
+
 uiElement* insertUI(int _passedIndex){
 	addUI();
 	memmove(&myUIBar[_passedIndex+1],&myUIBar[_passedIndex],sizeof(uiElement)*((totalUI-1)-_passedIndex));
@@ -357,14 +401,8 @@ void easyMessage(char* _newMessage){
 	controlsResetEmpty();
 }
 
-char* getDataFilePath(const char* _passedFilename){
-	char* _fixedPathBuffer = malloc(strlen(_passedFilename)+strlen(getFixPathString(TYPE_DATA))+1);
-	fixPath((char*)_passedFilename,_fixedPathBuffer,TYPE_DATA);
-	return _fixedPathBuffer;
-}
-
 void saveHotkeys(){
-	char* _settingsFilename = getDataFilePath("hotkeys.legSettings");
+	char* _settingsFilename = fixSafeDataPath("hotkeys.legSettings");
 	FILE* fp = fopen(_settingsFilename,"wb");
 	if (fp!=NULL){
 		u8 _tempHoldVersion = HOTKEYVERSION;
@@ -389,7 +427,7 @@ void saveHotkeys(){
 }
 
 void saveSettings(){
-	char* _settingsFilename = getDataFilePath("generalSettings.legSettings");
+	char* _settingsFilename = fixSafeDataPath("generalSettings.legSettings");
 	FILE* fp = fopen(_settingsFilename,"wb");
 	if (fp!=NULL){
 		u8 _tempHoldVersion = SETTINGSVERSION;
@@ -404,6 +442,7 @@ void saveSettings(){
 		fwrite(&optionUpdateCheck,sizeof(u8),1,fp);
 		fwrite(&masterVolume,sizeof(s8),1,fp);
 		fwrite(&currentThemeIndex,sizeof(u8),1,fp);
+		fwrite(&useAltDataDirectory,sizeof(u8),1,fp);
 
 		fclose(fp);
 	}else{
@@ -413,9 +452,8 @@ void saveSettings(){
 	free(_settingsFilename);
 }
 
-void loadSettings(){
-	char* _settingsFilename = getDataFilePath("generalSettings.legSettings");
-	FILE* fp = fopen(_settingsFilename,"rb");
+char loadSettings(char* _passedPath){
+	FILE* fp = fopen(_passedPath,"rb");
 	if (fp!=NULL){
 		u8 _tempHoldVersion = SETTINGSVERSION;
 		fread(&_tempHoldVersion,sizeof(u8),1,fp);
@@ -430,13 +468,18 @@ void loadSettings(){
 			fread(&masterVolume,sizeof(s8),1,fp);
 			fread(&currentThemeIndex,sizeof(u8),1,fp);
 		}
+		if (_tempHoldVersion>=2){
+			fread(&useAltDataDirectory,sizeof(u8),1,fp);
+		}
 		fclose(fp);
+	}else{
+		return 0;
 	}
-	free(_settingsFilename);
+	return 1;
 }
 
 void loadHotkeys(){
-	char* _settingsFilename = getDataFilePath("hotkeys.legSettings");
+	char* _settingsFilename = fixSafeDataPath("hotkeys.legSettings");
 	FILE* fp = fopen(_settingsFilename,"rb");
 	if (fp!=NULL){
 		u8 _tempReadVersion = HOTKEYVERSION;
@@ -773,10 +816,10 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 			return _readLine;
 		#else // Input for mobile
 			nList* _fileList = NULL;
-			CROSSDIR dir = openDirectory (getFixPathString(TYPE_DATA));
+			CROSSDIR dir = openDirectory (getDynamicDataPath());
 			if (dirOpenWorked(dir)==0){
-				char* _tempString = extraStrdup("Failed to open directory. Ensure the app has permission access to your files. To do this, go to the app's info, go to the permissions menu, and turn storage on.   ",strlen(getFixPathString(TYPE_DATA)));
-				strcat(_tempString,getFixPathString(TYPE_DATA));
+				char* _tempString = extraStrdup("Failed to open directory. "CANTOPENMESSAGE"  ",strlen(getDynamicDataPath()));
+				strcat(_tempString,getDynamicDataPath());
 				easyMessage(_tempString);
 				free(_tempString);
 				return NULL;
@@ -856,7 +899,7 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 			freenList(_fileList,1);
 			
 			if (_ret!=NULL){
-				char* _realRet = getDataFilePath(_ret);
+				char* _realRet = fixDynamicDataPath(_ret);
 				free(_ret);
 				return _realRet;
 			}else{
@@ -1338,7 +1381,7 @@ char saveSong(char* _passedFilename){
 		fwrite(SAVEENDMARKER,strlen(SAVEENDMARKER),1,fp);
 		fclose(fp);
 	}else{
-		char* _tempString = extraStrdup("Failed to open file. Please make sure the app has permission access to your files. ",strlen(_passedFilename));
+		char* _tempString = extraStrdup("Failed to open file. "CANTOPENMESSAGE" ",strlen(_passedFilename));
 		strcat(_tempString,_passedFilename);
 		easyMessage(_tempString);
 		free(_tempString);
@@ -1630,6 +1673,8 @@ void uiSettings(){
 	// No exit confirmations on mobile, so no need for those settings
 	if (!isMobile){
 		_totalSettings+=1;
+	}else{
+		_totalSettings+=1; // Even though this line is the same as the one above, it may not always be. Do not merge.
 	}
 
 	char* _settingsText[_totalSettings];
@@ -1650,6 +1695,9 @@ void uiSettings(){
 	if (!isMobile){
 		_settingsText[_totalSettings-1]="Double X allows confirmation override";
 			_settingsValues[_totalSettings-1]=&optionDoubleXAllowsExit;
+	}else{
+		_settingsText[_totalSettings-1]="Alternate song location";
+			_settingsValues[_totalSettings-1]=&useAltDataDirectory;
 	}
 
 	while (1){
@@ -1663,6 +1711,19 @@ void uiSettings(){
 			int _touchedEntry = _fixedTouchY/singleBlockSize;
 			if (_touchedEntry<_totalSettings){
 				*_settingsValues[_touchedEntry] = !*_settingsValues[_touchedEntry];
+				if (_settingsValues[_touchedEntry]==&useAltDataDirectory){ // Special case for when you toggle alt data directory
+					controlsResetEmpty();
+					if (easyChoice("Only change the song location if you know what you're doing. Continue?","No","Yes")){
+						if (useAltDataDirectory){
+							if (!canWriteAltDataPath()){
+								easyMessage("To use the alternate data directory, go to the app's info, go to the permissions menu, and turn storage permission on.");
+								useAltDataDirectory=0;
+							}
+						}
+					}else{
+						useAltDataDirectory=!useAltDataDirectory;
+					}
+				}
 			}
 		}
 		controlsEnd();
@@ -2966,8 +3027,6 @@ char init(){
 	//Mix_Init(MIX_INIT_OGG);
 	Mix_AllocateChannels(14*4); // We need a lot of channels for all these music notes
 
-	makeDataDirectory();
-
 	L = luaL_newstate();
 	luaL_openlibs(L);
 	pushLuaFunctions();
@@ -3059,6 +3118,30 @@ char init(){
 	_newButton->activateFunc = uiMetadata;
 	_newButton->uniqueId = U_METADATA;
 	//
+
+	// Three general use UI buttons
+	backButtonUI.image = loadEmbeddedPNG("assets/Free/Images/backButton.png");
+	backButtonUI.activateFunc = NULL;
+	backButtonUI.uniqueId=U_BACK;
+
+	infoButtonUI.image = loadEmbeddedPNG("assets/Free/Images/infoButton.png");
+	infoButtonUI.activateFunc = NULL;
+	infoButtonUI.uniqueId=U_INFO;
+
+	volumeButtonUI.image = loadEmbeddedPNG("assets/Free/Images/volumeButton.png");
+	volumeButtonUI.activateFunc=NULL;
+	volumeButtonUI.uniqueId=U_VOL;
+
+	newButtonImage = loadEmbeddedPNG("assets/Free/Images/newButton.png");
+	uiScrollImage = loadEmbeddedPNG("assets/Free/Images/moreUI.png");
+
+	upButtonUI.activateFunc = uiUp;
+	upButtonUI.uniqueId = U_UPBUTTON;
+	upButtonUI.image = loadEmbeddedPNG("assets/Free/Images/upButton.png");
+	downButtonUI.activateFunc = uiDown;
+	downButtonUI.uniqueId = U_DOWNBUTTON;
+	downButtonUI.image = loadEmbeddedPNG("assets/Free/Images/downButton.png");
+
 	if (!isMobile){
 		_newButton = addUI();
 		_newButton->image = loadEmbeddedPNG("assets/Free/Images/optionsButton.png");
@@ -3086,33 +3169,37 @@ char init(){
 		_newButton->uniqueId = U_ZOOMOUT;
 	}
 
-	// Three general use UI buttons
-	backButtonUI.image = loadEmbeddedPNG("assets/Free/Images/backButton.png");
-	backButtonUI.activateFunc = NULL;
-	backButtonUI.uniqueId=U_BACK;
-
-	infoButtonUI.image = loadEmbeddedPNG("assets/Free/Images/infoButton.png");
-	infoButtonUI.activateFunc = NULL;
-	infoButtonUI.uniqueId=U_INFO;
-
-	volumeButtonUI.image = loadEmbeddedPNG("assets/Free/Images/volumeButton.png");
-	volumeButtonUI.activateFunc=NULL;
-	volumeButtonUI.uniqueId=U_VOL;
-
-	newButtonImage = loadEmbeddedPNG("assets/Free/Images/newButton.png");
-	uiScrollImage = loadEmbeddedPNG("assets/Free/Images/moreUI.png");
-
-	upButtonUI.activateFunc = uiUp;
-	upButtonUI.uniqueId = U_UPBUTTON;
-	upButtonUI.image = loadEmbeddedPNG("assets/Free/Images/upButton.png");
-	downButtonUI.activateFunc = uiDown;
-	downButtonUI.uniqueId = U_DOWNBUTTON;
-	downButtonUI.image = loadEmbeddedPNG("assets/Free/Images/downButton.png");
-
 	//////////////////////////////
 
+	generalScale = tryUpdateGeneralScale(isMobile ? 1.7 : 1);
+	if (generalScale<0){
+		updateGeneralScale(1,1);
+		generalScale=1;
+	}
+
 	// Run before so theme index is loaded
-	loadSettings();
+	// First, try and load from safe data path
+	char* _settingsFilename = fixSafeDataPath("generalSettings.legSettings");
+	char _didLoadedSettings = loadSettings(_settingsFilename);
+	free(_settingsFilename);
+	if (!_didLoadedSettings){
+		// Failed to find settings in safe location, try alt
+		if (directoryExists(getAltDataPath())){
+			easyMessage("Welcome to v1.3!");
+			useAltDataDirectory=1;
+			// Optionally transfer their settings file to the new location
+			_settingsFilename = fixAltDataPath("generalSettings.legSettings");
+			if (loadSettings(_settingsFilename)){
+				remove(_settingsFilename);
+			}	
+			free(_settingsFilename);
+		}else{
+			// This is their first run
+			easyMessage("Welcome to Growtopia Music Simulator Final!");
+		}
+		// Save settings here so the useAltDataDirectory is saved or so the welcome message isn't shown every time
+		saveSettings();
+	}
 
 	// Very last, run the init script
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
@@ -3125,11 +3212,7 @@ char init(){
 		_newButton->uniqueId = U_THEME;
 	}
 
-	generalScale = tryUpdateGeneralScale(isMobile ? 1.7 : 1);
-	if (generalScale<0){
-		updateGeneralScale(1,1);
-		generalScale=1;
-	}
+	
 	
 	// Load hotkey config here because all UI and notes should be added by now.
 	loadHotkeys();
