@@ -24,6 +24,9 @@ enum uiID{
 	U_VOL,
 	//
 	U_SCRIPTBUTTON,
+	U_MOREUIBUTTON,
+	U_ZOOMIN,
+	U_ZOOMOUT,
 	U_RESERVED // Always last
 };
 
@@ -126,3 +129,5 @@ void uiYellowPlay();
 void updateNoteIcon();
 void XOutFunction();
 void tempDrawImageSize(CrossTexture* _passedTexture, int _x, int _y, int _newWidth, int _newHeight);
+void lowReallocUI(int _newNum);
+char updateGeneralScale(double _passed, char _isForced);

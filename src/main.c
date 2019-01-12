@@ -73,6 +73,7 @@
 #define CLICKTOGOBACK "Click this text to go back."
 
 #define AUDIOGEARSPACE 5
+#define ZOOMINCREMENT .1
 
 #define BONUSENDCHARACTER 1 // char value to signal the true end of the message text in easyMessage
 
@@ -125,8 +126,6 @@ SDL_Keycode* uiHotkeys=NULL;
 CrossTexture* playButtonImage;
 CrossTexture* stopButtonImage;
 CrossTexture* yellowPlayButtonImage;
-CrossTexture* upButtonImage;
-CrossTexture* downButtonImage;
 CrossTexture* newButtonImage;
 
 CrossTexture* uiScrollImage;
@@ -189,6 +188,9 @@ char positionString[12];
 uiElement backButtonUI;
 uiElement infoButtonUI;
 uiElement volumeButtonUI; // Can use this for both master volume and audio gear volume
+uiElement upButtonUI;
+uiElement downButtonUI;
+uiElement moreUiButtonUI;
 
 int uiUIScrollIndex=-1;
 
@@ -201,6 +203,15 @@ char* currentSongMetadata=NULL;
 char unsavedChanges=0;
 
 ////////////////////////////////////////////////
+uiElement* insertUI(int _passedIndex){
+	addUI();
+	memmove(&myUIBar[_passedIndex+1],&myUIBar[_passedIndex],sizeof(uiElement)*((totalUI-1)-_passedIndex));
+	return &myUIBar[_passedIndex];
+}
+void deleteUI(int _passedIndex){
+	memmove(&(myUIBar[_passedIndex]),&(myUIBar[_passedIndex+1]),sizeof(uiElement)*(totalUI-(_passedIndex+1)));
+	lowReallocUI(--totalUI);
+}
 int wrapNum(int _passed, int _min, int _max){
 	if (_passed>_max){
 		return _min+(_passed-_max-1);
@@ -764,7 +775,7 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 			nList* _fileList = NULL;
 			CROSSDIR dir = openDirectory (getFixPathString(TYPE_DATA));
 			if (dirOpenWorked(dir)==0){
-				char* _tempString = extraStrdup("Failed to open directory. Ensure the app has permission access to your files.   ",strlen(getFixPathString(TYPE_DATA)));
+				char* _tempString = extraStrdup("Failed to open directory. Ensure the app has permission access to your files. To do this, go to the app's info, go to the permissions menu, and turn storage on.   ",strlen(getFixPathString(TYPE_DATA)));
 				strcat(_tempString,getFixPathString(TYPE_DATA));
 				easyMessage(_tempString);
 				free(_tempString);
@@ -809,8 +820,8 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 				}
 				controlsEnd();
 				startDrawing();
-				tempDrawImageSize(upButtonImage,_drawXPos,0,_singleWidth,_singleHeight*2);
-				tempDrawImageSize(downButtonImage,_drawXPos,_singleHeight*2,_singleWidth,_singleHeight*2);
+				tempDrawImageSize(upButtonUI.image,_drawXPos,0,_singleWidth,_singleHeight*2);
+				tempDrawImageSize(downButtonUI.image,_drawXPos,_singleHeight*2,_singleWidth,_singleHeight*2);
 				tempDrawImageSize(playButtonImage,_drawXPos,_singleHeight*4,_singleWidth,_singleHeight);
 				tempDrawImageSize(stopButtonImage,_drawXPos,_singleHeight*5,_singleWidth,_singleHeight);
 				if (_isSaveDialog){
@@ -1187,15 +1198,18 @@ void centerAround(u32 _passedPosition){
 	}
 }
 
-uiElement* getUIByID(s16 _passedId){
+int getUIIndexByID(s16 _passedId){
 	int i;
 	for (i=0;i<totalUI;++i){
 		if (myUIBar[i].uniqueId==_passedId){
-			return &(myUIBar[i]);
+			return i;
 		}
 	}
-	//printf("Couldn't find the UI with id %d. You didn't delete it, right?",_passedId);
-	return NULL;
+	return -1;
+}
+uiElement* getUIByID(s16 _passedId){
+	int _possibleResult = getUIIndexByID(_passedId);
+	return _possibleResult!=-1 ? &(myUIBar[_possibleResult]) : NULL;
 }
 void updateNoteIcon(){
 	uiElement* _noteIconElement = getUIByID(U_SELICON);
@@ -1680,6 +1694,7 @@ void uiResizeSong(){
 		setSongWidth(songArray,songWidth,_newSongWidth);
 		songWidth=_newSongWidth;
 		setSongXOffset(songXOffset);
+		findMaxX();
 	}
 }
 
@@ -1871,7 +1886,21 @@ void uiScriptButton(){
 	}
 	free(_chosenFile);
 }
-
+void uiZoomIn(){
+	if (updateGeneralScale(generalScale+ZOOMINCREMENT,0)==0){
+		generalScale+=ZOOMINCREMENT;
+	}else{
+		updateGeneralScale(generalScale,1);
+	}
+	controlsResetEmpty();
+}
+void uiZoomOut(){
+	if ((updateGeneralScale(generalScale-ZOOMINCREMENT,0)==0) && singleBlockSize>20){
+		generalScale-=ZOOMINCREMENT;
+	}else{
+		updateGeneralScale(generalScale,0);
+	}
+}
 int fixX(int _x){
 	return _x+globalDrawXOffset;
 }
@@ -1880,11 +1909,13 @@ int fixY(int _y){
 	return _y+globalDrawYOffset;
 }
 
+void lowReallocUI(int _newNum){
+	myUIBar = realloc(myUIBar,sizeof(uiElement)*_newNum);
+	uiHotkeys = recalloc(uiHotkeys,sizeof(SDL_Keycode)*(_newNum-1),sizeof(SDL_Keycode)*_newNum);
+}
 // Add uiElement to main myUIBar and return it
 uiElement* addUI(){
-	++totalUI;
-	myUIBar = realloc(myUIBar,sizeof(uiElement)*totalUI);
-	uiHotkeys = recalloc(uiHotkeys,sizeof(SDL_Keycode)*(totalUI-1),sizeof(SDL_Keycode)*totalUI);
+	lowReallocUI(++totalUI);
 	myUIBar[totalUI-1].uniqueId=U_NOTUNIQUE;
 	return &(myUIBar[totalUI-1]);
 }
@@ -2836,27 +2867,9 @@ char updateAvailable(){
 	#endif
 }
 
-char init(){
-	#ifdef NEXUS_RES // Can test with resolution of Nexus 7 2012.
-		initGraphics(1280,800,&screenWidth,&screenHeight);
-	#else
-		initGraphics(832,480,&screenWidth,&screenHeight);
-	#endif
-	goodSetTitlebar("Growtopia Music Simulator Final",0);
-	setClearColor(192,192,192,255);
-	if (screenWidth!=832 || screenHeight!=480){
-		isMobile=1;
-	}else{
-		isMobile=ISTESTINGMOBILE;
-	}
-	if (isMobile){
-		// An odd value for testing.
-		generalScale=1.7;
-	}else{
-		generalScale=1;
-	}
-	if (generalScale!=0){
-		singleBlockSize = 32*generalScale;
+char updateGeneralScale(double _passed, char _isForced){
+	if (_passed!=0){
+		singleBlockSize = 32*_passed;
 		logicalScreenWidth = floor(screenWidth/singleBlockSize)*singleBlockSize;
 		logicalScreenHeight = floor(screenHeight/singleBlockSize)*singleBlockSize;
 		globalDrawXOffset = (screenWidth-logicalScreenWidth)/2;
@@ -2874,6 +2887,76 @@ char init(){
 	}
 	visiblePageHeight--; // Leave a space for the toolbar.
 	pageWidth = (logicalScreenWidth/singleBlockSize)-1;
+
+	if (!_isForced){
+		if ((totalUI+4)/2>=pageWidth){
+			return 1;
+		}else if (singleBlockSize<20){
+			return 2;
+		}
+	}
+
+	int _rightButtonIndex = getUIIndexByID(U_RIGHT);
+	if (visiblePageHeight!=pageHeight){
+		if (myUIBar[_rightButtonIndex+1].uniqueId!=U_UPBUTTON){
+			*(insertUI(_rightButtonIndex+1)) = upButtonUI;
+			*(insertUI(_rightButtonIndex+2)) = downButtonUI;
+		}
+	}
+
+	uiPageSize=totalUI;
+	// If we need more space for the UI because screen in small, add moreUI button
+	// We'll be moving the button or removing it, so get rid of it either way
+	if (getUIIndexByID(U_MOREUIBUTTON)!=-1){
+		deleteUI(getUIIndexByID(U_MOREUIBUTTON));
+	}
+	if (pageWidth<totalUI+3){ // 4 spaces for page number display. We only subtract 3 because we can use the labels on the far right as a UI spot
+		uiPageSize=pageWidth-3;
+		
+		uiElement* _newButton = insertUI(uiPageSize-1);
+		_newButton->image = uiScrollImage;
+		_newButton->activateFunc = uiUIScroll;
+		_newButton->uniqueId=U_MOREUIBUTTON;
+		
+		uiUIScrollIndex = uiPageSize-1;
+		if (uiScrollOffset!=0){
+			uiScrollOffset=uiUIScrollIndex;
+		}
+	}else{
+		uiScrollOffset=0;
+	}
+	return 0;
+}
+
+double tryUpdateGeneralScale(double _passed){
+	double _currentAttempt = _passed;
+	char _lastUpdateResult;
+	for (;(_lastUpdateResult=updateGeneralScale(_currentAttempt,0))>0;){
+		if (_lastUpdateResult==1){ // too big
+			_currentAttempt-=ZOOMINCREMENT;
+		}else if (_lastUpdateResult==2){ // too small
+			_currentAttempt+=ZOOMINCREMENT;
+		}
+		if (_currentAttempt==_passed || _currentAttempt<0){ // We've looped
+			return -1;
+		}
+	}
+	return _currentAttempt;
+}
+
+char init(){
+	#ifdef NEXUS_RES // Can test with resolution of Nexus 7 2012.
+		initGraphics(1280,800,&screenWidth,&screenHeight);
+	#else
+		initGraphics(832,480,&screenWidth,&screenHeight);
+	#endif
+	goodSetTitlebar("Growtopia Music Simulator Final",0);
+	setClearColor(192,192,192,255);
+	if (screenWidth!=832 || screenHeight!=480){
+		isMobile=1;
+	}else{
+		isMobile=ISTESTINGMOBILE;
+	}
 
 	//initAudio();
 	// Manually do SDL2_mixer audio init
@@ -2932,18 +3015,6 @@ char init(){
 	_newButton->image = loadEmbeddedPNG("assets/Free/Images/rightButton.png");
 	_newButton->activateFunc = uiRight;
 	_newButton->uniqueId = U_RIGHT;
-	upButtonImage = loadEmbeddedPNG("assets/Free/Images/upButton.png");
-	downButtonImage = loadEmbeddedPNG("assets/Free/Images/downButton.png");
-	if (visiblePageHeight!=pageHeight){
-		_newButton = addUI();
-		_newButton->image = upButtonImage;
-		_newButton->activateFunc = uiUp;
-		_newButton->uniqueId = U_UPBUTTON;
-		_newButton = addUI();
-		_newButton->image = downButtonImage;
-		_newButton->activateFunc = uiDown;
-		_newButton->uniqueId = U_DOWNBUTTON;
-	}
 
 	// Add yellow play button
 	_newButton = addUI();
@@ -2998,6 +3069,21 @@ char init(){
 		_newButton->image = loadEmbeddedPNG("assets/Free/Images/scriptButton.png");
 		_newButton->activateFunc = uiScriptButton;
 		_newButton->uniqueId = U_SCRIPTBUTTON;
+
+		// Add the shared volume button to the main UI bar when not on mobile
+		uiElement* _slotForSharedVolume = addUI();
+		memcpy(_slotForSharedVolume,&volumeButtonUI,sizeof(uiElement));
+		_slotForSharedVolume->activateFunc=uiSetMasterVolume;
+	}else{
+		_newButton = addUI();
+		_newButton->image = loadEmbeddedPNG("assets/Free/Images/zoomIn.png");
+		_newButton->activateFunc = uiZoomIn;
+		_newButton->uniqueId = U_ZOOMIN;
+
+		_newButton = addUI();
+		_newButton->image = loadEmbeddedPNG("assets/Free/Images/zoomOut.png");
+		_newButton->activateFunc = uiZoomOut;
+		_newButton->uniqueId = U_ZOOMOUT;
 	}
 
 	// Three general use UI buttons
@@ -3014,14 +3100,16 @@ char init(){
 	volumeButtonUI.uniqueId=U_VOL;
 
 	newButtonImage = loadEmbeddedPNG("assets/Free/Images/newButton.png");
+	uiScrollImage = loadEmbeddedPNG("assets/Free/Images/moreUI.png");
+
+	upButtonUI.activateFunc = uiUp;
+	upButtonUI.uniqueId = U_UPBUTTON;
+	upButtonUI.image = loadEmbeddedPNG("assets/Free/Images/upButton.png");
+	downButtonUI.activateFunc = uiDown;
+	downButtonUI.uniqueId = U_DOWNBUTTON;
+	downButtonUI.image = loadEmbeddedPNG("assets/Free/Images/downButton.png");
 
 	//////////////////////////////
-	if (!isMobile){
-		// Add the shared volume button to the main UI bar when not on mobile
-		uiElement* _slotForSharedVolume = addUI();
-		memcpy(_slotForSharedVolume,&volumeButtonUI,sizeof(uiElement));
-		_slotForSharedVolume->activateFunc=uiSetMasterVolume;
-	}
 
 	// Run before so theme index is loaded
 	loadSettings();
@@ -3037,27 +3125,11 @@ char init(){
 		_newButton->uniqueId = U_THEME;
 	}
 
-	// If we need more space for the UI because screen in small, add moreUI button
-	// I guess it's actually better to run this after the init script anyway
-	if (pageWidth<totalUI+3){ // 4 spaces for page number display. We only subtract 3 because we can use the labels on the far right as a UI spot
-		uiPageSize=pageWidth-3;
-		uiScrollImage = loadEmbeddedPNG("assets/Free/Images/moreUI.png");
-		
-		addUI(); // We just need an extra slot.
-		uiElement _uiScrollButton;
-		_uiScrollButton.image = uiScrollImage;
-		_uiScrollButton.activateFunc=uiUIScroll;
-
-		int i;
-		for (i=totalUI-2;i>=uiPageSize-1;--i){
-			myUIBar[i+1] = myUIBar[i];
-		}
-		memcpy(&(myUIBar[uiPageSize-1]),&_uiScrollButton,sizeof(uiElement));
-		uiUIScrollIndex = uiPageSize-1;
-	}else{
-		uiPageSize=totalUI;
+	generalScale = tryUpdateGeneralScale(isMobile ? 1.7 : 1);
+	if (generalScale<0){
+		updateGeneralScale(1,1);
+		generalScale=1;
 	}
-
 	
 	// Load hotkey config here because all UI and notes should be added by now.
 	loadHotkeys();
@@ -3075,7 +3147,7 @@ char init(){
 		return 1;
 	}
 	
-	if (checkFileExist("./noupdate")==1){
+	if (checkFileExist("./noupdate")){
 		optionUpdateCheck=0;
 	}
 
@@ -3084,7 +3156,7 @@ char init(){
 			if (easyChoice("Update available, copy URL to clipboard?","No","Yes")>=2){
 				// Actually doesn't work for me.
 				if (SDL_SetClipboardText(HUMANDOWNLOADPAGE)!=0){
-					printf("Failed to set clipboard\n");
+					easyMessage("Failed to set clipboard");
 				}
 			}
 		}else{
