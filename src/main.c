@@ -44,7 +44,7 @@
 #define SONGFORMATVERSION 1
 ///////////////////////////////////////
 
-#define ISTESTINGMOBILE 1
+#define ISTESTINGMOBILE 0
 #define DISABLESOUND 0
 
 #define u8 uint8_t
