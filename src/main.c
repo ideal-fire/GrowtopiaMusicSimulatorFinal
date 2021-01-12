@@ -81,10 +81,6 @@
 #define METADATAMARKER "META"
 #define SAVEENDMARKER "FSMG"
 
-#define UPDATEPASTE "E8h4z5yv"
-
-#define HUMANDOWNLOADPAGE "https://github.com/MyLegGuy/GrowtopiaMusicSimulatorFinal/releases"
-
 #define STUPID_NOTICE_1 "Some images & sounds are"
 #define STUPID_NOTICE_2 "assets by Ubisoft and"
 #define STUPID_NOTICE_3 "Growtopia. Some were modified."
@@ -1727,6 +1723,9 @@ void uiSettings(){
 					}else{
 						useAltDataDirectory=!useAltDataDirectory;
 					}
+				}else if (_settingsValues[_touchedEntry]==&optionUpdateCheck){
+					easyMessage("Update check functionality has been removed but I'm too lazy to delete this option.");
+					optionUpdateCheck=0;
 				}
 			}
 		}
@@ -1942,7 +1941,7 @@ void uiNoteIcon(){
 }
 
 void uiScriptButton(){
-	easyMessage("Warning:\nWith great power comes great responsibility.\n\nThis button lets you run scripts (code) written by people. User scripts can be harmful. Continue at your own risk.");
+	easyMessage("This is a button for running trustworthy custom code.");
 	char* _chosenFile = sharedFilePicker(0,"Lua Script/lua,gmsflua;",0,NULL);
 	if (_chosenFile!=NULL){
 		if ( !optionExitConfirmation || (!unsavedChanges || easyChoice("You have unsaved changes. If this script crashes the application, you'll lose your progress. Continue?","No","Yes"))){
@@ -2850,90 +2849,6 @@ void audioGearGUI(u8* _gearData){
 	free(_fakedMapArray);
 }
 
-char updateAvailable(){
-	#ifdef DISABLE_UPDATE_CHECKS
-		return 0;
-	#else
-		// Make sure updates are not disabled. Do not combine this check with the one above, this code should be able to be compiled without SDLNet
-		if (!optionUpdateCheck){
-			return 0;
-		}
-
-		char _updateAvalible=0;
-		SDLNet_Init();
-		IPaddress _pastebinIp;
-		if (SDLNet_ResolveHost(&_pastebinIp,"pastebin.com",80)==-1){
-			printf("Could not resolve host.\n");
-		}else{
-			TCPsocket _pastebinConnection = SDLNet_TCP_Open(&_pastebinIp);
-			char _webInfoBuffer[1024];
-		
-			strcpy(_webInfoBuffer,"GET /raw/");
-			strcat(_webInfoBuffer,UPDATEPASTE);
-			strcat(_webInfoBuffer," HTTP/1.1\r\n");
-			strcat(_webInfoBuffer,"Host: pastebin.com\r\n");
-			strcat(_webInfoBuffer,"\r\n");
-			
-			SDLNet_TCP_Send(_pastebinConnection, (void*)_webInfoBuffer, strlen(_webInfoBuffer));
-			// Receive data and null terminate it
-			_webInfoBuffer[SDLNet_TCP_Recv(_pastebinConnection, (void*)_webInfoBuffer, sizeof(_webInfoBuffer))]='\0';
-			/*
-			Example response:
-			////////////////////////////////////////
-			HTTP/1.1 200 OK
-			Date: Tue, 31 Jul 2018 06:34:56 GMT
-			Content-Type: text/plain; charset=utf-8
-			Transfer-Encoding: chunked
-			Connection: keep-alive
-			Set-Cookie: __cfduid=da302977d5186148c8fbd1578cd2131bc1533018896; expires=Wed, 31-Jul-19 06:34:56 GMT; path=/; domain=.pastebin.com; HttpOnly
-			Cache-Control: public, max-age=1801
-			Vary: Accept-Encoding
-			X-XSS-Protection: 1; mode=block
-			CF-Cache-Status: HIT
-			Expires: Tue, 31 Jul 2018 07:04:57 GMT
-			Server: cloudflare
-			CF-RAY: 442e0aca164c5753-IAD
-			
-			1
-			2
-
-			////////////////////////////////////////
-			The second to last line is the length of the data
-			The last line is the actual data. The last line also has a newline character at the end of it.
-			*/
-
-			// Parse gotten data
-			removeNewline(_webInfoBuffer);
-
-			int _foundNewline=-1;
-			int i;
-			for (i=strlen(_webInfoBuffer)-2;i>=0;--i){
-				if (_webInfoBuffer[i]==0x0A){
-					_foundNewline=i+1; // Start in front of the new line
-					break;
-				}
-			}
-			if (_foundNewline!=-1){
-				char _realDataBuffer[strlen(&(_webInfoBuffer[_foundNewline]))+1];
-				strcpy(_realDataBuffer,&(_webInfoBuffer[_foundNewline]));
-				printf("Web version: %s\n",_realDataBuffer);
-				int _maxWebVersion = atoi(_realDataBuffer);
-				if (_maxWebVersion>VERSIONNUMBER){
-					_updateAvalible=1;
-				}else if (_maxWebVersion==0){
-					printf("Failed to parse web response\n");
-					printf("%s\n",_webInfoBuffer);
-				}
-			}else{
-				printf("Failed to parse web response\n");
-				printf("%s\n",_webInfoBuffer);
-			}
-		}
-		SDLNet_Quit();
-		return _updateAvalible;
-	#endif
-}
-
 char updateGeneralScale(double _passed, char _isForced){
 	if (_passed!=0){
 		singleBlockSize = 32*_passed;
@@ -3236,24 +3151,7 @@ char init(){
 		printf("Could not make sound thread.");
 		return 1;
 	}
-	
-	if (checkFileExist("./noupdate")){
-		optionUpdateCheck=0;
-	}
-
-	if (updateAvailable()){
-		if (!isMobile){
-			if (easyChoice("Update available, copy URL to clipboard?","No","Yes")>=2){
-				// Actually doesn't work for me.
-				if (SDL_SetClipboardText(HUMANDOWNLOADPAGE)!=0){
-					easyMessage("Failed to set clipboard");
-				}
-			}
-		}else{
-			easyMessage("Update available.");
-		}
-	}
-	
+	optionUpdateCheck=0;
 	return 0;
 }
 void* soundPlayerThread(void* data){
