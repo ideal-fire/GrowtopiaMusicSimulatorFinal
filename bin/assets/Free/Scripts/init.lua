@@ -244,3 +244,6 @@ addTripleNotes("assets/Proprietary/Sound/violin_%d.wav",23,"assets/Proprietary/I
 
 -- Add lyre notes
 addTripleNotes("assets/Proprietary/Sound/lyre_%d.wav",26,"assets/Proprietary/Images/lyre.png","assets/Proprietary/Images/lyreSharp.png","assets/Proprietary/Images/lyreFlat.png",'L');
+
+-- Add electric guitar note
+addTripleNotes("assets/Proprietary/Sound/electric_guitar_%d.wav",29,"assets/Proprietary/Images/electricg.png","assets/Proprietary/Images/electricgsharp.png","assets/Proprietary/Images/electricgflat.png",'E');
