@@ -37,7 +37,7 @@
 
 ///////////////////////////////////////
 #define VERSIONNUMBER 3
-#define VERSIONSTRING "v1.3"
+#define VERSIONSTRING "v1.3.1"
 //////////////////
 #define SETTINGSVERSION 3
 #define HOTKEYVERSION 1
@@ -126,6 +126,8 @@ SDL_Keycode* uiHotkeys=NULL;
 CrossTexture* playButtonImage;
 CrossTexture* stopButtonImage;
 CrossTexture* yellowPlayButtonImage;
+CrossTexture* eraserTurnOnImage;
+CrossTexture* eraserTurnOffImage;
 CrossTexture* newButtonImage;
 
 CrossTexture* uiScrollImage;
@@ -138,6 +140,7 @@ double generalScale=-1;
 u16 singleBlockSize=32;
 
 u8 isMobile;
+u8 inEraserMode=0;
 
 s32 uiNoteIndex=0;
 u16 totalNotes=0;
@@ -1254,6 +1257,14 @@ uiElement* getUIByID(s16 _passedId){
 	int _possibleResult = getUIIndexByID(_passedId);
 	return _possibleResult!=-1 ? &(myUIBar[_possibleResult]) : NULL;
 }
+
+void changeButtonIcon(s16 _passedId, CrossTexture* _newImage){
+	uiElement* _elem = getUIByID(_passedId);
+	if (_elem!=NULL){
+		_elem->image=_newImage;
+	}
+}
+
 void updateNoteIcon(){
 	uiElement* _noteIconElement = getUIByID(U_SELICON);
 	if (_noteIconElement!=NULL){
@@ -1902,6 +1913,10 @@ void uiLeft(){
 }
 
 void uiNoteIcon(){
+	if (inEraserMode){
+		disableEraser();
+		return;
+	}
 	/*
 	uiNoteIndex++;
 	if (uiNoteIndex==totalNotes){
@@ -1938,6 +1953,24 @@ void uiNoteIcon(){
 	controlsResetEmpty();
 
 	updateNoteIcon();
+}
+
+void disableEraser(){
+	if (inEraserMode){
+		inEraserMode=0;
+		updateNoteIcon();
+		changeButtonIcon(U_ERASER, eraserTurnOnImage);
+	}
+}
+
+void uiToggleEraser(){
+	if (inEraserMode){
+		disableEraser();
+	}else{
+		inEraserMode=1;
+		changeButtonIcon(U_SELICON, eraserTurnOffImage);
+		changeButtonIcon(U_ERASER, eraserTurnOffImage);
+	}
 }
 
 void uiScriptButton(){
@@ -2608,6 +2641,7 @@ void drawSong(noteSpot** _songToDraw, int _drawWidth, int _drawHeight, int _xOff
 
 void noteUIControls(){
 	if (wasJustPressed(SCE_MOUSE_SCROLL)){
+		disableEraser();
 		if (mouseScroll<0){
 			uiNoteIndex--;
 			if (uiNoteIndex<0){
@@ -2681,6 +2715,7 @@ char noteHotkeyCheck(){
 			int j;
 			for (j=0;j<totalNotes;++j){
 				if (noteUIOrder[j]==i){
+					disableEraser();
 					uiNoteIndex=j;
 					updateNoteIcon();
 					return 1;
@@ -2997,6 +3032,17 @@ char init(){
 	_newButton->activateFunc = uiRight;
 	_newButton->uniqueId = U_RIGHT;
 
+	// eraser
+	if (isMobile){
+		eraserTurnOnImage=loadEmbeddedPNG("assets/Free/Images/eraser.png");
+		eraserTurnOffImage=loadEmbeddedPNG("assets/Free/Images/eraserTurnOff.png");;
+
+		_newButton = addUI();
+		_newButton->image = eraserTurnOnImage;
+		_newButton->activateFunc = uiToggleEraser;
+		_newButton->uniqueId = U_ERASER;
+	}
+	
 	// Add yellow play button
 	_newButton = addUI();
 	yellowPlayButtonImage = loadEmbeddedPNG("assets/Free/Images/yellowPlayButton.png");
@@ -3134,8 +3180,6 @@ char init(){
 		_newButton->uniqueId = U_THEME;
 	}
 
-	
-	
 	// Load hotkey config here because all UI and notes should be added by now.
 	loadHotkeys();
 
@@ -3223,7 +3267,7 @@ int main(int argc, char *argv[]){
 					if (!(_placeX==_lastPlaceX && _placeY==_lastPlaceY)){ // Don't place where we've just placed. Otherwise we'd be placing the same note on top of itself 60 times per second
 						_lastPlaceX = _placeX;
 						_lastPlaceY = _placeY;
-						placeNote(_placeX+songXOffset,_placeY+songYOffset,lastClickWasRight ? 0 : getUINoteID());
+						placeNote(_placeX+songXOffset,_placeY+songYOffset,(lastClickWasRight || inEraserMode) ? 0 : getUINoteID());
 					}
 				}
 			}

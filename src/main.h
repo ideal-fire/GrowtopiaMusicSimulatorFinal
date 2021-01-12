@@ -27,6 +27,7 @@ enum uiID{
 	U_MOREUIBUTTON,
 	U_ZOOMIN,
 	U_ZOOMOUT,
+	U_ERASER,
 	U_RESERVED // Always last
 };
 
@@ -131,3 +132,4 @@ void XOutFunction();
 void tempDrawImageSize(CrossTexture* _passedTexture, int _x, int _y, int _newWidth, int _newHeight);
 void lowReallocUI(int _newNum);
 char updateGeneralScale(double _passed, char _isForced);
+void disableEraser();
