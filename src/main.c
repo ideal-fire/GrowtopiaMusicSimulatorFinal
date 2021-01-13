@@ -234,7 +234,21 @@ char* getDynamicDataPath(){
 char* fixDynamicDataPath(char* _passedPath){
 	return useAltDataDirectory ? fixAltDataPath(_passedPath) : fixSafeDataPath(_passedPath);
 }
+#if SUBPLATFORM == SUB_ANDROID
+int mkdirpublic(const char *path){
+	return mkdir(path,S_IRWXU | S_IRWXG | S_IRWXO);
+}
+#endif
+int maybeMakeAltDataDir(){
+	#if SUBPLATFORM == SUB_ANDROID
+	if (!directoryExists(getAltDataPath())){
+		return mkdirpublic(getAltDataPath());
+	}
+	#endif
+	return 0;
+}
 char canWriteAltDataPath(){
+	maybeMakeAltDataDir();
 	char* _tempPath = fixAltDataPath("ifyouseethistestfilesomethinghasgoneveryrong");
 	FILE* fp = fopen(_tempPath,"wb");
 	if (fp!=NULL){
@@ -818,6 +832,9 @@ char* sharedFilePicker(char _isSaveDialog, const char* _filterList, char _forceE
 			removeNewline(_readLine);
 			return _readLine;
 		#else // Input for mobile
+			if (useAltDataDirectory){
+				maybeMakeAltDataDir();
+			}
 			nList* _fileList = NULL;
 			CROSSDIR dir = openDirectory (getDynamicDataPath());
 			if (dirOpenWorked(dir)==0){
@@ -3153,7 +3170,7 @@ char init(){
 			_settingsFilename = fixAltDataPath("generalSettings.legSettings");
 			if (loadSettings(_settingsFilename)){
 				remove(_settingsFilename);
-			}	
+			}
 			free(_settingsFilename);
 		}else{
 			// This is their first run
