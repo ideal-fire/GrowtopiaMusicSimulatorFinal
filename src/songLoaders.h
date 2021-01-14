@@ -177,11 +177,24 @@ void loadGMSOSong(FILE* fp){
 #define FILE_FORMAT_GTMUSIC 5
 void loadDumbGtmusicFormat(FILE* fp){
 	int _maxReadLine = 4*14+1; // 14 notes, 3 chars per note, 1 comma per note
+	char _placeholderChar;
 	char _readLine[_maxReadLine];
-	fgets(_readLine,_maxReadLine,fp); // First line is exactly %cernmusicsim;
+	if (fgets(_readLine,_maxReadLine,fp)==NULL){
+		fprintf(stderr,"failed to read first line form file?\n");
+		return;
+	}
+	removeNewline(_readLine);
+	if (strcmp(_readLine,"%gsmusicsim;")==0){
+		_placeholderChar=';';
+	}else{
+		_placeholderChar=',';
+		if (strcmp(_readLine,"%cernmusicsim;")!=0){
+			printf("assuming cernmusicsim even though idk what it is: \"%s\"\n",_readLine);
+		}
+	}
 	fgets(_readLine,_maxReadLine,fp); // Second line is bpm=x
 	removeNewline(_readLine);
-	bpm = atoi(&(_readLine[strlen("bmp=")]));
+	bpm = atoi(&(_readLine[strlen("bpm=")]));
 	// The file has space for up to 400 columns, but last I checked you only can use 100 columns.
 	int i;
 	for (i=0;i<400;++i){
@@ -199,7 +212,7 @@ void loadDumbGtmusicFormat(FILE* fp){
 			if (_stringReadPosition==strlen(_readLine)){ // If we're not at the end of the line without a high B
 				break;
 			}else{
-				if (_readLine[_stringReadPosition]!=','){ // If there's a note in this slot
+				if (_readLine[_stringReadPosition]!=_placeholderChar){ // If there's a note in this slot
 					char _foundLetter;
 					char _foundNoteName;
 					char _foundAccidental;
