@@ -247,3 +247,6 @@ addTripleNotes("assets/Proprietary/Sound/lyre_%d.wav",26,"assets/Proprietary/Ima
 
 -- Add electric guitar note
 addTripleNotes("assets/Proprietary/Sound/electric_guitar_%d.wav",29,"assets/Proprietary/Images/electricg.png","assets/Proprietary/Images/electricgsharp.png","assets/Proprietary/Images/electricgflat.png",'E');
+
+-- Add mexican trumpet note
+addTripleNotes("assets/Proprietary/Sound/mexican_trumpet_%d.wav",32,"assets/Proprietary/Images/mtrumpet.png","assets/Proprietary/Images/mtrumpetsharp.png","assets/Proprietary/Images/mtrumpetflat.png",'T');
