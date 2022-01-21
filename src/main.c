@@ -2097,6 +2097,7 @@ void uiCut(){
 			memset(&(songArray[j][i]),0,sizeof(noteSpot));
 		}
 	}
+	findMaxX();
 	markModified();
 }
 void uiPaste(){
@@ -2119,6 +2120,7 @@ void uiPaste(){
 	if (clip!=internalClipboard){
 		SDL_free(clip);
 	}
+	findMaxX();
 	markModified();
 	revertCursorMode();
 }
@@ -3192,6 +3194,11 @@ char init(){
 	songXOffset=0; // Raw to init values for scripts. Real set is after loading settings
 
 	initEmbeddedFont();
+	startDrawing();
+	generalScale=1;
+	drawString("Loading...",0,0);
+	generalScale=-1;
+	endDrawing();
 
 	// Init note array before we do the Lua
 	setTotalNotes(1);
