@@ -173,7 +173,6 @@ void loadGMSOSong(FILE* fp){
 // File format of cernodile's Growtopia Music Player.
 // Will have the .gtmusic extension.
 // Files are made from this tool: https://tools.cernodile.com/musicSim.php
-// This is my own loading code and I didn't look at yours. I don't have to abide to your restictive, evil license file.
 #define FILE_FORMAT_GTMUSIC 5
 void loadDumbGtmusicFormat(FILE* fp){
 	int _maxReadLine = 4*14+1; // 14 notes, 3 chars per note, 1 comma per note

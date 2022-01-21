@@ -1,6 +1,5 @@
 /*
 */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -12,10 +11,6 @@
 #include <GeneralGoodGraphics.h>
 #include <GeneralGoodSound.h>
 #include <GeneralGoodImages.h>
-
-#ifndef DISABLE_UPDATE_CHECKS
-	#include <SDL2/SDL_net.h>
-#endif
 
 #include <lua.h>
 #include <lualib.h>
@@ -35,9 +30,6 @@
 #include "nathanList.h"
 #include "goodLinkedList.h"
 
-///////////////////////////////////////
-#define VERSIONNUMBER 3
-#define VERSIONSTRING "v1.3.1"
 //////////////////
 #define SETTINGSVERSION 3
 #define HOTKEYVERSION 1
@@ -46,13 +38,6 @@
 
 #define ISTESTINGMOBILE 0
 #define DISABLESOUND 0
-
-#define u8 uint8_t
-#define u16 uint16_t
-#define u32 uint32_t
-#define s8 int8_t
-#define s16 int16_t
-#define s32 int32_t
 
 //#define fileByteOrder(x) htons(x)
 //#define hostByteOrder(x) ntohs(x)
@@ -72,7 +57,6 @@
 
 #define CLICKTOGOBACK "Click this text to go back."
 
-#define AUDIOGEARSPACE 5
 #define ZOOMINCREMENT .1
 
 #define BONUSENDCHARACTER 1 // char value to signal the true end of the message text in easyMessage
@@ -89,9 +73,14 @@
 //#define NOSTROAGEWARNING "Ensure the app has permission access to your files. To do this, go to the app's info, go to the permissions menu, and turn storage on."
 
 #define THEME_FILENAME_FORMAT "assets/Free/Images/pcBackground%d.png"
-
+/////
+#define CURSORMODE_NORMAL 0
+#define CURSORMODE_ERASER 1
+#define CURSORMODE_SELECT 2
 ////////////////////////////////////////////////
-#include "main.h"
+#include "mainprivate.h"
+#include "clipboard.h"
+void getSelectionCorners(int* startx, int* starty, int* endx, int* endy);
 ////////////////////////////////////////////////
 u8 optionPlayOnPlace=1;
 u8 optionZeroBasedPosition=0;
@@ -128,6 +117,8 @@ CrossTexture* stopButtonImage;
 CrossTexture* yellowPlayButtonImage;
 CrossTexture* eraserTurnOnImage;
 CrossTexture* eraserTurnOffImage;
+CrossTexture* rectSelectTurnOnImage;
+CrossTexture* rectSelectTurnOffImage;
 CrossTexture* newButtonImage;
 
 CrossTexture* uiScrollImage;
@@ -140,7 +131,7 @@ double generalScale=-1;
 u16 singleBlockSize=32;
 
 u8 isMobile;
-u8 inEraserMode=0;
+u8 cursorMode=CURSORMODE_NORMAL;
 
 s32 uiNoteIndex=0;
 u16 totalNotes=0;
@@ -149,6 +140,8 @@ u8 currentlyPlaying=0;
 s32 currentPlayPosition;
 s32 nextPlayPosition;
 u64 lastPlayAdvance=0;
+
+s32 selectpos[4]={-1};
 
 // Only the width of a page can change and it depends on the scale set by the user
 u16 pageWidth=25;
@@ -202,6 +195,7 @@ int uiUIScrollIndex=-1;
 const char noteNames[] = {'B','A','G','F','E','D','C','b','a','g','f','e','d','c'};
 
 char* currentSongMetadata=NULL;
+char* internalClipboard=NULL;
 
 char unsavedChanges=0;
 
@@ -302,13 +296,19 @@ void goodSetTitlebar(char* _newTitle, char _isModified){
 		setWindowTitle(_currentTitlebar);
 	}
 }
+void markModified(){
+	if (!unsavedChanges){
+		unsavedChanges=1;
+		goodSetTitlebar(NULL,1);
+	}
+}
 
 // -1 if failed, otherwise the index of the actually loaded theme
 int loadTheme(u8 _preferredIndex){
 	if (backgroundMode!=BGMODE_SINGLE){
 		return -1;
 	}
-	free(bigBackground);
+	freeTexture(bigBackground);
 	bigBackground=NULL;
 
 	CrossTexture* _newBackground;
@@ -535,9 +535,11 @@ void loadHotkeys(){
 u8 getUINoteID(){
 	return noteUIOrder[uiNoteIndex];
 }
-
+int gearBuffSize(){
+	return AUDIOGEARSPACE*2+1;
+}
 u8* getGearVolume(u8* _passedExtraData){
-	return &(_passedExtraData[AUDIOGEARSPACE*sizeof(u8)*2]);
+	return &(_passedExtraData[gearBuffSize()-1]);
 }
 int touchXToBlock(int _passedTouchX){
 	return floor((_passedTouchX-globalDrawXOffset)/singleBlockSize);
@@ -569,8 +571,29 @@ void setSongXOffset(int _newValue){
 	sprintf(positionString,"%d/%d",songXOffset+!optionZeroBasedPosition,songWidth);
 }
 
-// Will memory leak audio gears
+void dupNote(noteSpot* old, noteSpot* new){
+	new->id=old->id;
+	if (old->id==audioGearID){
+		new->extraData=malloc(gearBuffSize());
+		memcpy(new->extraData,old->extraData,gearBuffSize());
+	}else{
+		new->extraData=NULL;
+	}
+}
+void freeNote(noteSpot* me){
+	if (me->id==audioGearID){
+		free(me->extraData);
+	}
+}
+void freeSongArr(noteSpot** inarr, int x, int y, int w, int h){
+	for (int j=y;j<y+h;++j){
+		for (int i=x;i<x+w;++i){
+			freeNote(&(inarr[j][i]));
+		}
+	}
+}
 void clearSong(){
+	freeSongArr(songArray,0,0,songWidth,songHeight);
 	setSongXOffset(0);
 	setSongWidth(songArray,songWidth,400);
 	songWidth=400;
@@ -584,7 +607,6 @@ void clearSong(){
 	}
 }
 
-// Windows has bad C library, the few useful functions it has Windows doesn't have.
 char* strndup(const char *str, size_t size){
 	char* _newBuffer = malloc(size+1);
 	int i;
@@ -1930,8 +1952,8 @@ void uiLeft(){
 }
 
 void uiNoteIcon(){
-	if (inEraserMode){
-		disableEraser();
+	if (cursorMode!=CURSORMODE_NORMAL){
+		revertCursorMode();
 		return;
 	}
 	/*
@@ -1972,22 +1994,133 @@ void uiNoteIcon(){
 	updateNoteIcon();
 }
 
-void disableEraser(){
-	if (inEraserMode){
-		inEraserMode=0;
-		updateNoteIcon();
-		changeButtonIcon(U_ERASER, eraserTurnOnImage);
+void setCursorModeButtons(CrossTexture* img){
+	static int ids[] = {U_SELICON,U_ERASER,U_RSELECT};
+	for (int i=0;i<sizeof(ids)/sizeof(int);++i){
+		changeButtonIcon(ids[i], img);
 	}
 }
 
 void uiToggleEraser(){
-	if (inEraserMode){
-		disableEraser();
+	if (cursorMode!=CURSORMODE_NORMAL){
+		revertCursorMode();
 	}else{
-		inEraserMode=1;
-		changeButtonIcon(U_SELICON, eraserTurnOffImage);
-		changeButtonIcon(U_ERASER, eraserTurnOffImage);
+		cursorMode=CURSORMODE_ERASER;
+		setCursorModeButtons(eraserTurnOffImage);
 	}
+}
+void revertCursorMode(){
+	if (cursorMode==CURSORMODE_NORMAL){
+		return;
+	}
+	cursorMode=CURSORMODE_NORMAL;
+	// fix icons
+	updateNoteIcon();
+	changeButtonIcon(U_ERASER, eraserTurnOnImage);
+	changeButtonIcon(U_RSELECT, rectSelectTurnOnImage);
+	// if more work was needed for a specific mode, it would go here.
+	selectpos[0]=-1;
+}
+
+void uiRectSelect(){
+	if (cursorMode!=CURSORMODE_NORMAL){
+		revertCursorMode();
+	}else{
+		cursorMode=CURSORMODE_SELECT;
+		setCursorModeButtons(rectSelectTurnOffImage);
+	}
+}
+int uiReqSelection(){
+	if (cursorMode!=CURSORMODE_SELECT){
+		easyMessage("This button is used in selection mode.");
+		return 1;
+	}
+	return 0;
+}
+int uiReqBothSelection(){
+	if (uiReqSelection()){
+		return 1;
+	}else if (selectpos[0]==-1 || selectpos[2]==-1){
+		easyMessage("This button requires both points of the selection to be set.");
+		return 1;
+	}
+	return 0;
+}
+int uiReqSingleSelection(){
+	if (totalNotes>(0x21 - 0x7E)+1){
+	}
+	if (uiReqSelection()){
+		return 1;
+	}else if (selectpos[0]==-1 || selectpos[2]!=-1){
+		easyMessage("This button requires exactly one point of the selection to be set.");
+		return 1;
+	}
+	return 0;
+}
+static int uiRequireCopyLimit(){
+	if (totalNotes>MAXCLIPNUM){
+		easyMessage("Too many note types defined for copy/paste to work. What year is it?");
+		return 1;
+	}
+	return 0;
+}
+void uiCopy(){
+	if (uiReqBothSelection() || uiRequireCopyLimit()){
+		return;
+	}
+	free(internalClipboard);
+	internalClipboard=NULL;
+	int startx,starty,endx,endy;
+	getSelectionCorners(&startx, &starty, &endx, &endy);
+	char* strbuff=makeclipbuff(songArray, startx, starty, endx, endy);
+	if (!strbuff){
+		easyMessage("failed to allocate clipboard buff");
+	}else{
+		if (SDL_SetClipboardText(strbuff) || !SDL_HasClipboardText()){
+			internalClipboard=strbuff;
+		}else{
+			free(strbuff);
+		}
+	}
+	revertCursorMode();
+}
+void uiCut(){
+	if (uiReqBothSelection() || uiRequireCopyLimit()){
+		return;
+	}
+	int startx,starty,endx,endy;
+	getSelectionCorners(&startx, &starty, &endx, &endy);
+	uiCopy();
+	freeSongArr(songArray,startx,starty,endx-startx+1,endy-starty+1);
+	for (int j=starty;j<=endy;++j){
+		for (int i=startx;i<=endx;++i){
+			memset(&(songArray[j][i]),0,sizeof(noteSpot));
+		}
+	}
+	markModified();
+}
+void uiPaste(){
+	if (uiReqSingleSelection() || uiRequireCopyLimit()){
+		return;
+	}
+	char* clip=internalClipboard;
+	if (!clip){
+		clip=SDL_GetClipboardText();
+		if (clip[0]=='\0'){
+			fprintf(stderr,"clipboard get failed: %s\n",SDL_GetError());
+			SDL_free(clip);
+		}
+	}
+	char* err=insertclipbuff(clip,songArray,selectpos[0],selectpos[1],songWidth,songHeight);
+	if (err){
+		fprintf(stderr,"paste failed\n");
+		easyMessage(err);
+	}
+	if (clip!=internalClipboard){
+		SDL_free(clip);
+	}
+	markModified();
+	revertCursorMode();
 }
 
 void uiScriptButton(){
@@ -2591,7 +2724,7 @@ void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound, noteSpot** _
 		free(_passedSong[_y][_x].extraData);
 	}
 	if (_noteId==audioGearID){
-		_passedSong[_y][_x].extraData = calloc(1,AUDIOGEARSPACE*sizeof(u8)*2+1);
+		_passedSong[_y][_x].extraData = calloc(1,gearBuffSize());
 		*getGearVolume(_passedSong[_y][_x].extraData)=100;
 	}else{
 		_passedSong[_y][_x].extraData=NULL;
@@ -2604,7 +2737,6 @@ void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound, noteSpot** _
 	_passedSong[_y][_x].id=_noteId;
 }
 void placeNote(int _x, int _y, u16 _noteId){
-	
 	if (_noteId==audioGearID && songArray[_y][_x].id==audioGearID){
 		controlLoop();
 		audioGearGUI(songArray[_y][_x].extraData);
@@ -2620,9 +2752,7 @@ void placeNote(int _x, int _y, u16 _noteId){
 			findMaxX();
 		}
 	}
-	
-	unsavedChanges=1;
-	goodSetTitlebar(NULL,1);
+	markModified();
 }
 
 void drawPlayBar(int _x){
@@ -2658,7 +2788,7 @@ void drawSong(noteSpot** _songToDraw, int _drawWidth, int _drawHeight, int _xOff
 
 void noteUIControls(){
 	if (wasJustPressed(SCE_MOUSE_SCROLL)){
-		disableEraser();
+		revertCursorMode();
 		if (mouseScroll<0){
 			uiNoteIndex--;
 			if (uiNoteIndex<0){
@@ -2695,9 +2825,60 @@ void drawUIBar(uiElement* _passedUIBar){
 		drawSingleUI(&(_passedUIBar[i]),(i-uiScrollOffset));
 	}
 }
-
+//
+void maybeDrawSelectionCorner(int absolutex, int absolutey){
+	if (absolutex!=-1){
+		drawRectangle(absolutex,absolutey,singleBlockSize,singleBlockSize,232,147,36,200);
+	}
+}
+int gmsfmin(int a, int b){
+	return a<b ? a : b;
+}
+int gmsfmax(int a, int b){
+	return a>b ? a : b;
+}
+void getSongOverlayPos(int tilexin, int tileyin, int songoffx, int songoffy, int* rx, int* ry){
+	*rx=tilexin-songoffx;
+	*ry=tileyin-songoffy;
+	if (*rx<pageWidth && *ry<visiblePageHeight){
+		(*rx)*=singleBlockSize;
+		(*ry)*=singleBlockSize;
+	}else{
+		*rx=-1;
+	}
+}
+void getSelectionCorners(int* startx, int* starty, int* endx, int* endy){
+	*startx=gmsfmin(selectpos[0],selectpos[2]);
+	*starty=gmsfmin(selectpos[1],selectpos[3]);
+	*endx=gmsfmax(selectpos[0],selectpos[2]);
+	*endy=gmsfmax(selectpos[1],selectpos[3]);
+}
+void drawSelectionMisc(){
+	if (cursorMode==CURSORMODE_SELECT){
+		drawRectangle(0,0,pageWidth*singleBlockSize,visiblePageHeight*singleBlockSize,0,0,255,50);
+		if (selectpos[0]!=-1){
+			int xdraw,ydraw;
+			getSongOverlayPos(selectpos[0],selectpos[1],songXOffset,songYOffset,&xdraw,&ydraw);
+			maybeDrawSelectionCorner(xdraw,ydraw);
+			if (selectpos[2]!=-1){
+				getSongOverlayPos(selectpos[2],selectpos[3],songXOffset,songYOffset,&xdraw,&ydraw);
+				maybeDrawSelectionCorner(xdraw,ydraw);
+				// draw rectangle
+				int startx,starty,endx,endy;
+				getSelectionCorners(&startx,&starty,&endx,&endy);
+				startx-=songXOffset;
+				starty-=songYOffset;
+				endx-=songXOffset;
+				endy-=songYOffset;
+				drawRectangle(startx*singleBlockSize,starty*singleBlockSize,(endx-startx+1)*singleBlockSize,(endy-starty+1)*singleBlockSize,255,68,0,100);
+			}
+		}
+	}
+}
+//
 void doUsualDrawing(){
 	drawSong(songArray,pageWidth,visiblePageHeight,songXOffset,songYOffset);
+	drawSelectionMisc();
 	if (currentlyPlaying){
 		drawPlayBar(currentPlayPosition);
 	}
@@ -2732,7 +2913,7 @@ char noteHotkeyCheck(){
 			int j;
 			for (j=0;j<totalNotes;++j){
 				if (noteUIOrder[j]==i){
-					disableEraser();
+					revertCursorMode();
 					uiNoteIndex=j;
 					updateNoteIcon();
 					return 1;
@@ -3103,6 +3284,26 @@ char init(){
 	_newButton->activateFunc = uiMetadata;
 	_newButton->uniqueId = U_METADATA;
 	//
+	rectSelectTurnOnImage=loadEmbeddedPNG("assets/Free/Images/rectSelectButton.png");
+	rectSelectTurnOffImage=loadEmbeddedPNG("assets/Free/Images/rectSelectButtonOff.png");
+	_newButton = addUI();
+	_newButton->image = rectSelectTurnOnImage;
+	_newButton->activateFunc = uiRectSelect;
+	_newButton->uniqueId = U_RSELECT;
+	//
+	_newButton = addUI();
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/cutButton.png");
+	_newButton->activateFunc = uiCut;
+	_newButton->uniqueId = U_CUT;
+	_newButton = addUI();
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/copyButton.png");
+	_newButton->activateFunc = uiCopy;
+	_newButton->uniqueId = U_COPY;
+	_newButton = addUI();
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/pasteButton.png");
+	_newButton->activateFunc = uiPaste;
+	_newButton->uniqueId = U_PASTE;
+	//
 
 	// Three general use UI buttons
 	backButtonUI.image = loadEmbeddedPNG("assets/Free/Images/backButton.png");
@@ -3180,6 +3381,13 @@ char init(){
 		saveSettings();
 	}
 
+	if (backgroundMode==BGMODE_SINGLE){
+		_newButton = addUI();
+		_newButton->image = loadEmbeddedPNG("assets/Free/Images/themeButton.png");
+		_newButton->activateFunc = uiTheme;
+		_newButton->uniqueId = U_THEME;
+	}
+
 	generalScale = tryUpdateGeneralScale(generalScale!=-1 ? generalScale : (isMobile ? 1.7 : 1));
 	if (generalScale<0){
 		updateGeneralScale(1,1);
@@ -3189,13 +3397,6 @@ char init(){
 	// Very last, run the init script
 	fixPath("assets/Free/Scripts/init.lua",tempPathFixBuffer,TYPE_EMBEDDED);
 	goodLuaDofile(L,tempPathFixBuffer,1);
-
-	if (backgroundMode==BGMODE_SINGLE){
-		_newButton = addUI();
-		_newButton->image = loadEmbeddedPNG("assets/Free/Images/themeButton.png");
-		_newButton->activateFunc = uiTheme;
-		_newButton->uniqueId = U_THEME;
-	}
 
 	// Load hotkey config here because all UI and notes should be added by now.
 	loadHotkeys();
@@ -3284,7 +3485,27 @@ int main(int argc, char *argv[]){
 					if (!(_placeX==_lastPlaceX && _placeY==_lastPlaceY)){ // Don't place where we've just placed. Otherwise we'd be placing the same note on top of itself 60 times per second
 						_lastPlaceX = _placeX;
 						_lastPlaceY = _placeY;
-						placeNote(_placeX+songXOffset,_placeY+songYOffset,(lastClickWasRight || inEraserMode) ? 0 : getUINoteID());
+						if (cursorMode==CURSORMODE_SELECT){
+							s32* d;
+							if (selectpos[0]==-1 || (selectpos[2]!=-1)){
+								selectpos[2]=-1;
+								d=&selectpos[0];
+							}else if (selectpos[2]==-1){
+								d=&selectpos[2];
+							}
+							d[0]=_placeX+songXOffset;
+							d[1]=_placeY+songYOffset;
+						}else{
+							int placeval=-1;
+							if (cursorMode==CURSORMODE_NORMAL){
+								placeval=lastClickWasRight ? 0 : getUINoteID();
+							}else if (cursorMode==CURSORMODE_ERASER){
+								placeval=0;
+							}
+							if (placeval!=-1){
+								placeNote(_placeX+songXOffset,_placeY+songYOffset,placeval);
+							}
+						}
 					}
 				}
 			}
