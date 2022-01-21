@@ -63,11 +63,19 @@ char* insertclipbuff(char* clipbuff, noteSpot** sarr, int startx, int starty, in
 			break;
 		}
 		for (int x=startx;x<endx;++x){
-			if(lenleft==0){
+			unsigned char b;
+			do{
+				if(lenleft==0){
+					goto gotoret;
+				}
+				b=*(next++);
+				lenleft--;
+			}while(b<MINCLIPASCII);
+			int id=clipToNum(b,0);
+			if (id>=totalNotes){
+				ret="Corrupted note ID";
 				goto gotoret;
 			}
-			int id=clipToNum(*(next++),0);
-			lenleft--;
 			if (x>=arrw){
 				if (id==audioGearID){
 					lenleft-=gearreqlen;
