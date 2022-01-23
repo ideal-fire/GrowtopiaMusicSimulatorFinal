@@ -1682,7 +1682,7 @@ void uiSetMasterVolume(){
 	masterVolume = _newVolume;
 	saveSettings();
 	if (masterVolume>75){
-		easyMessage(">75 is earrape territory");
+		easyMessage(">75 is ear rape territory");
 	}
 }
 
@@ -1700,8 +1700,8 @@ void uiCredits(){
 		controlsEnd();
 		startDrawing();
 		drawString("MyLegGuy - Programming",0,0);
-		drawString("HonestyCow - Sound matching",0,CONSTCHARW);
-		drawString("D.RS - Theme",0,CONSTCHARW*2);
+		drawString("HonestyCow - Original Sound matching",0,CONSTCHARW);
+		drawString("D.RS - Original Themes",0,CONSTCHARW*2);
 		drawString("Bonk - BPM Forumla",0,CONSTCHARW*3);
 		drawString(VERSIONSTRING,0,CONSTCHARW*5);
 		drawString(__DATE__,0,CONSTCHARW*6);

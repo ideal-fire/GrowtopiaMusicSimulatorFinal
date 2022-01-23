@@ -104,7 +104,6 @@ char* insertclipbuff(char* clipbuff, noteSpot** sarr, int startx, int starty, in
 					unsigned char volhigh=clipToNum(*(next++),0);
 					unsigned char vollow=clipToNum(*(next++),0);
 					int vol=volhigh*10+vollow;
-					printf("%d;%d;%d\n",volhigh,vollow,vol);
 					if (vol>100){
 						vol=100;
 						ret="invalid audio gear volume level";
