@@ -1,0 +1,5 @@
+This is the Growtopia Music Simulator privacy policy that I need to link on the Google Play Store.
+
+Privacy policy:
+This program only saves your settings and your songs. No other data is saved or collected.
+Since 2021, this program does not ever connect to the internet.
