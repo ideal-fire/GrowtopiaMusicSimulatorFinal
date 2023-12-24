@@ -487,6 +487,9 @@ char loadSettings(char* _passedPath){
 		}
 		if (_tempHoldVersion>=3){
 			fread(&generalScale,sizeof(double),1,fp);
+			if (!isMobile){
+				generalScale=-1;
+			}
 		}
 		fclose(fp);
 	}else{
@@ -3162,12 +3165,33 @@ double tryUpdateGeneralScale(double _passed){
 	return _currentAttempt;
 }
 
+void getDefaultWindowSize(int* w, int* h){
+	*w=0;
+	*h=0;
+	char* _override_filename = fixSafeDataPath("override_window_size.txt");
+	FILE* fp=fopen(_override_filename,"rb");
+	if (fp!=NULL){
+		char line[100];
+		if (fgets(line,sizeof(line),fp)){
+			*w=atoi(line);
+			if (fgets(line,sizeof(line),fp)){
+				*h=atoi(line);
+			}
+		}
+		fclose(fp);
+	}
+	free(_override_filename);
+	if (*w==0 || *h==0){
+		*w=832;
+		*h=480;
+	}
+}
+
 char init(){
-	#ifdef NEXUS_RES // Can test with resolution of Nexus 7 2012.
-		initGraphics(1280,800,&screenWidth,&screenHeight);
-	#else
-		initGraphics(832,480,&screenWidth,&screenHeight);
-	#endif
+	int _defaultWindowWidth;
+	int _defaultWindowHeight;
+	getDefaultWindowSize(&_defaultWindowWidth,&_defaultWindowHeight);
+	initGraphics(_defaultWindowWidth,_defaultWindowHeight,&screenWidth,&screenHeight);
 	goodSetTitlebar("Growtopia Music Simulator Final",0);
 	setClearColor(192,192,192,255);
 	if (screenWidth!=832 || screenHeight!=480){
