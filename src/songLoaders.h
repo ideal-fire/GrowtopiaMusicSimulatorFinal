@@ -200,71 +200,62 @@ void loadDumbGtmusicFormat(FILE* fp){
 		fgets(_readLine,_maxReadLine,fp);
 		removeNewline(_readLine);
 		int _stringReadPosition=0;
-		int j;
+		int _len=strlen(_readLine);
 		// Notes are listed from bottom to top
 		// All lines start with a comma
 		// Last note (high B) does not end with a comma
-		for (j=0;j<14;++j){
+		while (1){
 			// All lines start with a comma
 			_stringReadPosition++;
-
-			if (_stringReadPosition==strlen(_readLine)){ // If we're not at the end of the line without a high B
+			if (_stringReadPosition>=_len-3){
 				break;
-			}else{
-				if (_readLine[_stringReadPosition]!=_placeholderChar){ // If there's a note in this slot
-					char _foundLetter;
-					char _foundNoteName;
-					char _foundAccidental;
-
-					_foundLetter = _readLine[_stringReadPosition];
-					_foundNoteName = _readLine[_stringReadPosition+1];
-					_foundAccidental = _readLine[_stringReadPosition+2];
-
-					// Find note ID using info we have
-					char _foundActualNoteID=0;
-					if (_foundLetter=='L'){ // Blank
-						printf("Cannot load blank notes from stupid format\n");
-					}else if (_foundLetter=='r'){ // Repeat start
-						_foundActualNoteID = repeatStartID;
-					}else if (_foundLetter=='R'){ // Repeat end
-						_foundActualNoteID = repeatEndID;
-					}else if (_foundLetter=='H'){ // Spooky
-						printf("Cannot load spooky notes from stupid format\n");
-					}else{
-						int k;
-						// Find the note's ID based on the letter and accidental
-						for (k=0;k<totalNotes;++k){
-							if (extraNoteInfo[k].letter==_foundLetter && extraNoteInfo[k].accidental==_foundAccidental){
-								_foundActualNoteID=k;
-								break;
-							}
-						}
-					}
-
-					// If we found the note, use more info to place it
-					if (_foundActualNoteID!=0){
-						// Find the position that goes with that note name
-						int l;
-						for (l=0;l<sizeof(noteNames);++l){
-							if (_foundNoteName==noteNames[l]){
-								_placeNoteLow(i,l,_foundActualNoteID,0,songArray);
-								break;
-							}
-						}
-					}else{
-						printf("Note not found, %c%c%c\n%s\n",_foundLetter,_foundNoteName,_foundAccidental,_readLine);
-					}
-					// We only read two more bytes than we normally would because the first letter is the comma we always read
-					_stringReadPosition+=2;
-				}
 			}
-	
-			/*
-				addChar(_completeString,extraNoteInfo[_fakedMapArray[j][i].id].letter);
-				addChar(_completeString,noteNames[j]);
-				addChar(_completeString,extraNoteInfo[_fakedMapArray[j][i].id].accidental);
-			*/
+			if (_readLine[_stringReadPosition]!=_placeholderChar){ // If there's a note in this slot
+				char _foundLetter;
+				char _foundNoteName;
+				char _foundAccidental;
 
+				_foundLetter = _readLine[_stringReadPosition];
+				_foundNoteName = _readLine[_stringReadPosition+1];
+				_foundAccidental = _readLine[_stringReadPosition+2];
+
+				// Find note ID using info we have
+				char _foundActualNoteID=0;
+				if (_foundLetter=='L'){ // Blank
+					printf("Cannot load blank notes from stupid format\n");
+				}else if (_foundLetter=='r'){ // Repeat start
+					_foundActualNoteID = repeatStartID;
+				}else if (_foundLetter=='R'){ // Repeat end
+					_foundActualNoteID = repeatEndID;
+				}else if (_foundLetter=='H'){ // Spooky
+					printf("Cannot load spooky notes from stupid format\n");
+				}else{
+					int k;
+					// Find the note's ID based on the letter and accidental
+					for (k=0;k<totalNotes;++k){
+						if (extraNoteInfo[k].letter==_foundLetter && extraNoteInfo[k].accidental==_foundAccidental){
+							_foundActualNoteID=k;
+							break;
+						}
+					}
+				}
+
+				// If we found the note, use more info to place it
+				if (_foundActualNoteID!=0){
+					// Find the position that goes with that note name
+					int l;
+					for (l=0;l<sizeof(noteNames);++l){
+						if (_foundNoteName==noteNames[l]){
+							_placeNoteLow(i,l,_foundActualNoteID,0,songArray);
+							break;
+						}
+					}
+				}else{
+					printf("Note not found, %c%c%c\n%s\n",_foundLetter,_foundNoteName,_foundAccidental,_readLine);
+				}
+				// We only read two more bytes than we normally would because the first letter is the comma we always read
+				_stringReadPosition+=2;
+			}
 		}
 	}
 	findMaxX();
