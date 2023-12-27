@@ -52,7 +52,7 @@
 
 // length of MAXINTPLAE in base 10
 #define MAXINTINPUT 7
-// No values bigger than this
+// No values bigger than this or equal to
 #define MAXINTPLAE 1000000
 
 #define CLICKTOGOBACK "Click this text to go back."
@@ -308,7 +308,9 @@ int loadTheme(u8 _preferredIndex){
 	if (backgroundMode!=BGMODE_SINGLE){
 		return -1;
 	}
-	freeTexture(bigBackground);
+	if (bigBackground){
+		freeTexture(bigBackground);
+	}
 	bigBackground=NULL;
 
 	CrossTexture* _newBackground;
@@ -1077,14 +1079,15 @@ void int2str(char* _outBuffer, int _inNumber){
 	sprintf(_outBuffer,"%d",_inNumber);
 }
 
-void _addNumberInput(long* _outNumber, char* _outBuffer, int _addNumber){
-	if (*_outNumber>=MAXINTPLAE){
+void _addNumberInput(long* _outNumber, char* _outBuffer, int _addNumber, long _max){
+	unsigned long _new=*_outNumber*10;
+	_new+=_addNumber;
+	if (_new>=_max){
 		drawRectangle(0,0,logicalScreenWidth,logicalScreenHeight,255,0,0,255);
-	}else{
-		*_outNumber*=10;
-		*_outNumber+=_addNumber;
-		int2str(_outBuffer,*_outNumber);
+		_new=_max-1;
 	}
+	*_outNumber=_new;
+	int2str(_outBuffer,*_outNumber);
 }
 void _delNumberInput(long* _outNumber, char* _outBuffer){
 	if (*_outNumber==0){
@@ -1094,7 +1097,8 @@ void _delNumberInput(long* _outNumber, char* _outBuffer){
 		int2str(_outBuffer,*_outNumber);
 	}
 }
-long getNumberInput(const char* _prompt, long _defaultNumber){
+long getNumberInput_limited_noloop(const char* _prompt, long _defaultNumber, long _min, long _max){
+	_max=_max+1;
 	controlLoop();
 	long _userInput=_defaultNumber;
 	char _userInputAsString[MAXINTINPUT+1]={'\0'};
@@ -1173,7 +1177,7 @@ long getNumberInput(const char* _prompt, long _defaultNumber){
 					}
 					// If they actually pressed a number
 					if (_pressedValue!=-1){
-						_addNumberInput(&_userInput,_userInputAsString,_pressedValue);
+						_addNumberInput(&_userInput,_userInputAsString,_pressedValue,_max);
 					}
 				}
 			}
@@ -1183,7 +1187,7 @@ long getNumberInput(const char* _prompt, long _defaultNumber){
 			int _fixedTouchY = touchY-globalDrawYOffset;
 			if (_fixedTouchY>logicalScreenHeight-singleBlockSize*2){
 				if (_fixedTouchY<logicalScreenHeight-singleBlockSize){
-					_addNumberInput(&_userInput,_userInputAsString,_fixedTouchX/singleBlockSize);
+					_addNumberInput(&_userInput,_userInputAsString,_fixedTouchX/singleBlockSize,_max);
 				}else{
 					if (_fixedTouchX>_backspaceButtonX && _fixedTouchX<_backspaceButtonX+_backspaceWidth){
 						_delNumberInput(&_userInput,_userInputAsString);
@@ -1230,6 +1234,18 @@ long getNumberInput(const char* _prompt, long _defaultNumber){
 
 	controlLoop();
 	return _userInput;
+}
+long getNumberInput_limited(const char* _prompt, long _defaultNumber, long _min, long _max){
+again:
+	long a = getNumberInput_limited_noloop(_prompt, _defaultNumber, _min, _max);
+	if (a<_min || a>_max){
+		goto again;
+	}
+	return a;
+}
+// min and max are inclusive
+long getNumberInput(const char* _prompt, long _defaultNumber){
+	return getNumberInput_limited(_prompt,_defaultNumber,0,MAXINTPLAE+1);
 }
 
 // Inclusive bounds
@@ -1678,11 +1694,7 @@ void uiMetadata(){
 }
 
 void uiSetMasterVolume(){
-	s8 _newVolume=-1;
-	do{
-		_newVolume = getNumberInput("Master volume (1-100)",masterVolume);
-	}while(!(_newVolume>=0 && _newVolume<=100));
-	masterVolume = _newVolume;
+	masterVolume = getNumberInput_limited("Master volume (1-100)",masterVolume,1,100);
 	saveSettings();
 	if (masterVolume>75){
 		easyMessage(">75 is ear rape territory");
@@ -1803,10 +1815,7 @@ void uiSettings(){
 }
 
 void uiResizeSong(){
-	int _newSongWidth=0;
-	do{
-		_newSongWidth = getNumberInput("Enter song width",songWidth);
-	}while(_newSongWidth<pageWidth);
+	int _newSongWidth=getNumberInput_limited("Enter song width",songWidth,pageWidth,0x7fff-1);
 	if (songWidth!=_newSongWidth){
 		setSongWidth(songArray,songWidth,_newSongWidth);
 		songWidth=_newSongWidth;
@@ -1816,9 +1825,7 @@ void uiResizeSong(){
 }
 
 void uiBPM(){
-	do{
-		bpm=getNumberInput("Input beats per minute.",bpm);
-	}while(bpm==0);
+	bpm=getNumberInput_limited("Input beats per minute.",bpm,1,0x7fff-1);
 	if (bpm<20 || bpm>200){
 		if (bpm==18){ // Easter egg
 			easyMessage("And remember.....decimals are friends, not numbers.");
@@ -3017,10 +3024,7 @@ void audioGearGUI(u8* _gearData){
 						}
 						controlLoop();
 					}else if (_gearUIPointers[_placeX]->uniqueId==U_VOL){
-						u8 _newVolume;
-						do{
-							_newVolume = getNumberInput("Audio Gear volume (1-100)",*_gearVolume);
-						}while(_newVolume<=0 || _newVolume>100);
+						u8 _newVolume = getNumberInput_limited("Audio Gear volume (1-100)",*_gearVolume,1,100);
 						*_gearVolume=_newVolume;
 						sprintf(_volumeString,"Vol: %d",*_gearVolume);
 					}else{
@@ -3049,9 +3053,11 @@ void audioGearGUI(u8* _gearData){
 				}
 			}
 		}
-		if (wasJustPressed(SCE_ANDROID_BACK)){
-			break;
-		}
+		#if SUBPLATFORM == SUB_ANDROID
+			if (wasJustPressed(SCE_ANDROID_BACK)){
+				break;
+			}
+		#endif
 		noteUIControls();
 		if (lastSDLPressedKey!=SDLK_UNKNOWN){
 			noteHotkeyCheck();

@@ -15,7 +15,6 @@ void* soundPlayerThread(void* data);
 void addChar(char* _sourceString, char _addChar);
 void easyMessage(char* _newMessage);
 char easyChoice(char* _title, char* _redChoice, char* _greenChoice);
-void _addNumberInput(long* _outNumber, char* _outBuffer, int _addNumber);
 void _delNumberInput(long* _outNumber, char* _outBuffer);
 void _placeNoteLow(int _x, int _y, u8 _noteId, u8 _shouldPlaySound, noteSpot** _passedSong);
 uiElement* addUI();
