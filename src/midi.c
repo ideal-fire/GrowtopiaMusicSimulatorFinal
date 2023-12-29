@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "midi.h"
 
@@ -48,17 +49,17 @@ static s_instrument INSTRUMENTS[INSTR_COUNT + 1] = {
 	(s_instrument){4, 32, 2}, // bass
 	(s_instrument){7, 0, 9}, // drum
 	(s_instrument){8, 0, -1}, // blank
-	(s_instrument){9, 42, 4}, // sax
+	(s_instrument){9, 66, 4}, // sax
 	(s_instrument){12, 0,-1}, // repeat0
 	(s_instrument){13, 0,-1}, // repeat1
 	(s_instrument){14, 0,-1}, // spooky
 	(s_instrument){15, 0,-1}, // gear
 	(s_instrument){16, 73, 6}, // flute
 	(s_instrument){19, 0,-1}, // festive
-	(s_instrument){20, 24, 8}, // guitar
+	(s_instrument){20, 26, 8}, // guitar
 	(s_instrument){23, 40, 10}, // violin
 	(s_instrument){26, 46, 11}, // lyrem
-	(s_instrument){29, 27, 12}, // guitar2
+	(s_instrument){29, 29, 12}, // guitar2
 	(s_instrument){32, 56, 13}, // trumpet
 	(s_instrument){INSTR_MAX, 0, -1} // CAP
 };
@@ -164,12 +165,16 @@ static int instr_toNote(int instr, int y){
 		// -- normal
 
 		// octave value (bass special case)
-		int octave = 60;
-		if(instr >= INSTRUMENTS[INSTR_BASS].baseId && instr < INSTRUMENTS[INSTR_BASS+1].baseId)
-			octave = 24;
-
-		// accidentals
 		int baseInstr = INSTR_MAP[instr]->baseId;
+		int octave = 60;
+		if(baseInstr == INSTRUMENTS[INSTR_BASS].baseId)
+			octave = 24;
+		else if(baseInstr == INSTRUMENTS[INSTR_SAX].baseId || baseInstr == INSTRUMENTS[INSTR_GUITAR].baseId)
+			octave = 48;
+		else if(baseInstr == INSTRUMENTS[INSTR_FLUTE].baseId)
+			octave = 72;
+
+
 		if(instr == baseInstr + 1) // sharp
 			octave++;
 		else if(instr == baseInstr + 2) // flat
@@ -319,7 +324,7 @@ int gmsf_makeMIDI(FILE* file, s_gmsf *song, unsigned short noteDuration, int loo
 					// --- gears
 
 					U8 *arr = song->notes[y][x].extraData;
-					U8 vol = arr[AUDIOGEARSPACE*2] / 100.0 * 127;
+					U8 vol = sqrt(arr[AUDIOGEARSPACE*2] / 100.0) * 127;
 
 					for(I = 0; I < AUDIOGEARSPACE; I++){
 						if(arr[I*2] != 0){
