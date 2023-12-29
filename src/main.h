@@ -1,3 +1,8 @@
+#ifndef MAINH
+#define MAINH
+
+#include <stdint.h>
+
 #define VERSIONNUMBER 3
 #define VERSIONSTRING "v1.5"
 
@@ -43,6 +48,7 @@ enum uiID{
 	U_CUT,
 	U_COPY,
 	U_PASTE,
+	U_MIDI,
 
 	U_RESERVED // Always last
 };
@@ -65,3 +71,5 @@ extern u16 totalNotes;
 
 extern uint8_t audioGearID;
 #define AUDIOGEARSPACE 5
+
+#endif

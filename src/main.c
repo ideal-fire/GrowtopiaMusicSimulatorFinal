@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <pthread.h>
+#include <errno.h>
 
 #include <GeneralGoodConfig.h>
 #include <GeneralGood.h>
@@ -29,6 +30,7 @@
 #include "luaDofileEmbedded.h"
 #include "nathanList.h"
 #include "goodLinkedList.h"
+#include "midi.h"
 
 //////////////////
 #define SETTINGSVERSION 3
@@ -2162,6 +2164,77 @@ void uiZoomOut(){
 		updateGeneralScale(generalScale,0);
 	}
 }
+
+// show message from errno
+void easyshowerr(){
+	char* emsg=strerror(errno);
+	char* _tempString = extraStrdup("Error: ",strlen(emsg));
+	strcat(_tempString,emsg);
+	easyMessage(_tempString);
+	free(_tempString);
+}
+void uimidiexport(){
+	char* _chosenFile = sharedFilePicker(1,"MIDI/mid;",1,".mid");
+	if (_chosenFile==NULL){
+		return;
+	}
+	if (checkFileExist(_chosenFile)){
+		if (optionExitConfirmation){
+			char* _tempString = extraStrdup("Overwrite ",strlen(_chosenFile));
+			strcat(_tempString,_chosenFile);
+			char _choice = easyChoice(_tempString,"No","Yes");
+			free(_tempString);
+			if (_choice==0){
+				return;
+			}
+		}
+	}
+
+	FILE* _sample=fopen(_chosenFile,"rb");
+	if (_sample){
+		char _read[strlen(MIDIMAGIC)];
+		errno=0;
+		if (fread(_read,1,strlen(MIDIMAGIC),_sample)!=strlen(MIDIMAGIC)){
+			if (errno==0){
+				memset(_read,0,sizeof(_read)); // make the midi check fail
+			}else{
+				easyshowerr();
+				free(_chosenFile);
+				return;
+			}
+		}
+		int _cmp=memcmp(_read,MIDIMAGIC,strlen(MIDIMAGIC));
+		fclose(_sample);
+		if (_cmp!=0){
+			easyMessage("refusing to overwrite file because it's not a midi file.");
+			free(_chosenFile);
+			return;
+		}
+	}else if (!(errno==ENOENT || !checkFileExist(_chosenFile))){
+		easyshowerr();
+		free(_chosenFile);
+		return;
+	}
+
+	unsigned char _loops=getNumberInput_limited("Input number of times the music should repeat (0 for none)", 0,0,100);
+
+	FILE* _output=fopen(_chosenFile,"wb");
+	free(_chosenFile);
+	if (!_output){
+		easyshowerr();
+		return;
+	}
+
+	s_gmsf _in;
+	_in.notes=songArray;
+	_in.bpm=bpm;
+	_in.tall=songHeight;
+	_in.wide=songWidth;
+	if (gmsf_makeMIDI(_output, &_in, 500, loops)){
+		easyMessage("error");
+	}
+}
+
 int fixX(int _x){
 	return _x+globalDrawXOffset;
 }
@@ -3364,6 +3437,11 @@ char init(){
 	downButtonUI.activateFunc = uiDown;
 	downButtonUI.uniqueId = U_DOWNBUTTON;
 	downButtonUI.image = loadEmbeddedPNG("assets/Free/Images/downButton.png");
+
+	_newButton = addUI();
+	_newButton->image = loadEmbeddedPNG("assets/Free/Images/midiIcon.png");
+	_newButton->activateFunc = uimidiexport;
+	_newButton->uniqueId = U_MIDI;
 
 	if (!isMobile){
 		_newButton = addUI();
