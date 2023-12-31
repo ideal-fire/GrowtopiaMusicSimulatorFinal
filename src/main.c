@@ -2230,7 +2230,7 @@ void uimidiexport(){
 	_in.bpm=bpm;
 	_in.tall=songHeight;
 	_in.wide=songWidth;
-	if (gmsf_makeMIDI(_output, &_in, 500, loops)){
+	if (gmsf_makeMIDI(_output, &_in, 500, _loops)){
 		easyMessage("error");
 	}
 }
