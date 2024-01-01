@@ -333,7 +333,7 @@ int loadTheme(u8 _preferredIndex){
 	}
 }
 
-char* wrapText(char* _passedMessage){
+char* wrapText(const char* _passedMessage){
 	char* currentTextboxMessage = malloc(strlen(_passedMessage)+2);
 	strcpy(currentTextboxMessage,_passedMessage);
 	// Step 1 - Put words into buffer with newlines
@@ -381,7 +381,8 @@ char* wrapText(char* _passedMessage){
 	return currentTextboxMessage;
 }
 
-void drawWrappedText(char* _passedMessage, int _x, int _y){
+// returns the number of lines drawn
+int drawWrappedText(char* _passedMessage, int _x, int _y){
 	// Note - this code is copied for easyChoice
 	int i;
 	int _currentDrawPosition=0;
@@ -394,6 +395,7 @@ void drawWrappedText(char* _passedMessage, int _x, int _y){
 			_currentDrawPosition++;
 		}
 	}
+	return i+1;
 }
 
 // Code stolen from Happy Land.
@@ -1117,6 +1119,7 @@ long getNumberInput_limited_noloop(const char* _prompt, long _defaultNumber, lon
 	
 	char _shouldExit=0;
 
+	char* _wrappedMessage = wrapText(_prompt);
 	int2str(_userInputAsString,_userInput);
 	//itoa(num, buffer, 10);
 	while (!_shouldExit){
@@ -1204,8 +1207,8 @@ long getNumberInput_limited_noloop(const char* _prompt, long _defaultNumber, lon
 		}
 		controlsEnd();
 		
-		drawString(_prompt,0,0);
-		drawString(_userInputAsString,0,singleBlockSize);
+		int _promptsize=drawWrappedText(_wrappedMessage,0,0);
+		drawString(_userInputAsString,0,singleBlockSize*(_promptsize+1));
 		char _currentDrawNumber=0;
 		char j;
 		for (j=0;j<=9;++j){
@@ -1233,6 +1236,7 @@ long getNumberInput_limited_noloop(const char* _prompt, long _defaultNumber, lon
 
 		endDrawing();
 	}
+	free(_wrappedMessage);
 
 	controlLoop();
 	return _userInput;
@@ -1719,7 +1723,7 @@ void uiCredits(){
 		drawString("MyLegGuy - Programming",0,0);
 		drawString("HonestyCow - Original Sound matching",0,CONSTCHARW);
 		drawString("D.RS - Original Themes",0,CONSTCHARW*2);
-		drawString("Bonk - BPM Forumla",0,CONSTCHARW*3);
+		drawString("Bonk - BPM Formula",0,CONSTCHARW*3);
 		drawString(VERSIONSTRING,0,CONSTCHARW*5);
 		drawString(__DATE__,0,CONSTCHARW*6);
 		drawString(__TIME__,0,CONSTCHARW*7);
@@ -2216,7 +2220,7 @@ void uimidiexport(){
 		return;
 	}
 
-	unsigned char _loops=getNumberInput_limited("Input number of times the music should repeat (0 for none)", 0,0,100);
+	unsigned char _loops=getNumberInput_limited("Input the number of times the music should repeat:", 0,0,100);
 
 	FILE* _output=fopen(_chosenFile,"wb");
 	free(_chosenFile);
