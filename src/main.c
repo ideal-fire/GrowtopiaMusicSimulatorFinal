@@ -20,7 +20,7 @@
 #ifndef NO_FANCY_DIALOG
 	#if SUBPLATFORM == SUB_WINDOWS
 		#include <windows.h>
-		#include <Commdlg.h>
+		#include <commdlg.h>
 	#else
 		#include <nfd.h>
 	#endif
