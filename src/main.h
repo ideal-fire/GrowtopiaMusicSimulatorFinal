@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #define VERSIONNUMBER 3
-#define VERSIONSTRING "v1.5"
+#define VERSIONSTRING "v1.6"
 
 #define u8 uint8_t
 #define u16 uint16_t

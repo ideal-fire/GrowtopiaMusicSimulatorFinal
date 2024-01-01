@@ -333,6 +333,7 @@ int loadTheme(u8 _preferredIndex){
 	}
 }
 
+// to-do: doenst force-wrap long lines
 char* wrapText(const char* _passedMessage){
 	char* currentTextboxMessage = malloc(strlen(_passedMessage)+2);
 	strcpy(currentTextboxMessage,_passedMessage);
